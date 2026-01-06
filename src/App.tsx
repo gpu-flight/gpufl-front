@@ -6,10 +6,10 @@ import { useStore } from './store/useStore'
 const { Header, Content } = Layout
 
 export default function App() {
-  const loadMock = useStore((s) => s.loadMock)
+  const fetchInit = useStore((s) => s.fetchInit)
   useEffect(() => {
-    loadMock()
-  }, [loadMock])
+    fetchInit()
+  }, [fetchInit])
 
   return (
     <ConfigProvider

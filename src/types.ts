@@ -27,11 +27,51 @@ export interface TraceEvent {
   depth?: number;
 }
 
-export interface MetricSample {
+export interface HostMetricSample {
+  id: string;
   sessionId: string;
-  ts_ns: number;
-  gpu_id: number;
-  temperature?: number;
-  memory_used_mb?: number;
-  gpu_utilization?: number;
+  time: string;
+  tsNs: number;
+  hostname: string;
+  cpuPct: number;
+  ramUsedMib: number;
+  ramTotalMib: number;
 }
+
+export interface DeviceMetricSample {
+  id: string;
+  sessionId: string;
+  time: string;
+  tsNs: number;
+  deviceId: number;
+  utilGpu: number;
+  utilMem: number;
+  tempC: number;
+  memUsedMib: number;
+  memTotalMib: number;
+  powerW: number;
+  fanSpeedPct: number;
+}
+
+export interface SystemMetricsResponse {
+  rangeStart: number;
+  rangeEnd: number;
+  hostMetrics: HostMetricSample[];
+  deviceMetrics: DeviceMetricSample[];
+}
+
+export interface RawSession {
+  sessionId: string;
+  app: string;
+  time: string;
+  tsNs: number;
+  shutdownTsNs: number;
+  systemRateMs: number;
+  hostMetrics: HostMetricSample[];
+  deviceMetrics?: DeviceMetricSample[]; // Might not be in init
+  cudaStaticDevices: any[];
+  kernels: any[];
+  scopes: any[];
+}
+
+export type InitResponse = RawSession[];

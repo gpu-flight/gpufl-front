@@ -10,17 +10,23 @@ export default function Dashboard() {
   const { sessionId } = useParams()
   const sessions = useStore((s) => s.sessions)
   const events = useStore((s) => s.events)
-  const metrics = useStore((s) => s.metrics)
+  const hostMetrics = useStore((s) => s.hostMetrics)
+  const deviceMetrics = useStore((s) => s.deviceMetrics)
+  const metricsRange = useStore((s) => s.metricsRange)
+  const globalRange = useStore((s) => s.globalRange)
+  const fetchSystemMetrics = useStore((s) => s.fetchSystemMetrics)
   const selectSession = useStore((s) => s.selectSession)
   const highlightRange = useStore((s) => s.highlightRange)
 
   React.useEffect(() => {
-    if (sessionId) selectSession(sessionId)
-  }, [sessionId, selectSession])
+    if (sessionId) {
+      selectSession(sessionId)
+      fetchSystemMetrics(sessionId)
+    }
+  }, [sessionId, selectSession, fetchSystemMetrics])
 
   const session = useMemo(() => sessions.find((s) => s.sessionId === sessionId), [sessions, sessionId])
   const sessionEvents = useMemo(() => events.filter(e => e.sessionId === sessionId), [events, sessionId])
-  const sessionMetrics = useMemo(() => metrics.filter(m => m.sessionId === sessionId), [metrics, sessionId])
 
   return (
     <div style={{ height: 'calc(100vh - 96px)', overflow: 'hidden' }}>
@@ -34,16 +40,16 @@ export default function Dashboard() {
               <Tag color="purple">Events: {session?.totalEvents}</Tag>
             </Space>
           </Card>
-          <Card title="System Metrics" size="small" style={{ flex: 1, background: '#0f1318', marginBottom: 12, minHeight: 0 }}>
-            <div style={{ height: '100%' }}>
-              <MetricsChart data={sessionMetrics} highlightRange={highlightRange} />
-            </div>
-          </Card>
-          <Card title="Timeline" size="small" style={{ flex: 1, background: '#0f1318', minHeight: 0 }}>
-            <div style={{ height: '100%' }}>
-              <TimelineView events={sessionEvents} />
-            </div>
-          </Card>
+          <div style={{ flex: 1, overflowY: 'auto', marginBottom: 12 }}>
+            <Card title="System Metrics" size="small" style={{ background: '#0f1318', marginBottom: 12 }}>
+              <MetricsChart hostData={hostMetrics} deviceData={deviceMetrics} globalRange={globalRange} highlightRange={highlightRange} />
+            </Card>
+            <Card title="Timeline" size="small" style={{ background: '#0f1318', height: 400 }}>
+              <div style={{ height: '100%' }}>
+                <TimelineView events={sessionEvents} globalRange={globalRange} />
+              </div>
+            </Card>
+          </div>
         </Col>
         <Col span={6} style={{ height: '100%' }}>
           <Inspector />
