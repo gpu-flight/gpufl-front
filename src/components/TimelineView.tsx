@@ -9,9 +9,10 @@ function nsToMs(ns: number) {
 
 export interface TimelineViewProps {
   events: TraceEvent[]
+  globalRange?: { start_ns: number; end_ns: number }
 }
 
-export default function TimelineView({ events }: TimelineViewProps) {
+export default function TimelineView({ events, globalRange }: TimelineViewProps) {
   const setActiveEvent = useStore((s) => s.setActiveEvent)
   const containerRef = useRef<HTMLDivElement>(null)
   const timelineInstance = useRef<Timeline | null>(null)
@@ -72,10 +73,10 @@ export default function TimelineView({ events }: TimelineViewProps) {
     return {
       groups: new DataSet(groupList),
       items: new DataSet(itemsList),
-      minStart: minTs !== Infinity ? new Date(minTs) : undefined,
-      maxEnd: maxTs !== -Infinity ? new Date(maxTs) : undefined,
+      minStart: globalRange ? new Date(nsToMs(globalRange.start_ns)) : (minTs !== Infinity ? new Date(minTs) : undefined),
+      maxEnd: globalRange ? new Date(nsToMs(globalRange.end_ns)) : (maxTs !== -Infinity ? new Date(maxTs) : undefined),
     }
-  }, [events])
+  }, [events, globalRange])
 
   const options = useMemo(
     () => ({
@@ -83,6 +84,8 @@ export default function TimelineView({ events }: TimelineViewProps) {
       zoomFriction: 5,
       min: minStart,
       max: maxEnd,
+      start: minStart,
+      end: maxEnd,
       selectable: true,
       multiselect: false,
       verticalScroll: true,
