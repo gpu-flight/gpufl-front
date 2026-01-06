@@ -1,0 +1,13 @@
+.vis-timeline .item.kernel-item {
+  background-color: rgba(59, 130, 246, 0.35);
+  border-color: #3b82f6;
+  color: #e5e7eb;
+}
+.vis-timeline .item.scope-item {
+  background-color: rgba(16, 185, 129, 0.35);
+  border-color: #10b981;
+  color: #e5e7eb;
+}
+.vis-timeline .vis-panel.vis-center, .vis-timeline .vis-panel.vis-left, .vis-timeline .vis-panel.vis-right {
+  background: #0b0d10;
+}
