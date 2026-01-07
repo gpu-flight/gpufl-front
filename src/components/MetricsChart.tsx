@@ -14,12 +14,14 @@ import { HostMetricSample, DeviceMetricSample } from '@/types'
 import { Checkbox, Space, Divider, Typography } from 'antd'
 import { useStore, MetricKey } from '@/store/useStore'
 
-function nsToMs(ns: number) {
-  return ns / 1_000_000
+function nsToUs(ns: number) {
+  return ns / 1_000
 }
 
-function formatTime(ms: number) {
-  return new Date(ms).toLocaleTimeString()
+function formatTime(us: number) {
+  // Simple relative time in microseconds or milliseconds
+  if (us < 1000) return `${us.toFixed(0)}us`
+  return `${(us / 1000).toFixed(2)}ms`
 }
 
 export interface MetricsChartProps {
@@ -38,8 +40,8 @@ export default function MetricsChart({ hostData, deviceData, globalRange, highli
     const start = globalRange.start_ns
     return hostData.map(m => ({
       ...m,
-      ts_rel_ms: nsToMs(m.tsNs - start)
-    })).sort((a, b) => a.ts_rel_ms - b.ts_rel_ms)
+      ts_rel_us: nsToUs(m.tsNs - start)
+    })).sort((a, b) => a.ts_rel_us - b.ts_rel_us)
   }, [hostData, globalRange])
 
   const deviceChartData = useMemo(() => {
@@ -48,7 +50,7 @@ export default function MetricsChart({ hostData, deviceData, globalRange, highli
     const byTs = new Map<number, any>()
     for (const m of deviceData) {
       const key = m.tsNs
-      const row = byTs.get(key) || { ts_rel_ms: nsToMs(key - start) }
+      const row = byTs.get(key) || { ts_rel_us: nsToUs(key - start) }
       row[`utilGpu_d${m.deviceId}`] = m.utilGpu
       row[`utilMem_d${m.deviceId}`] = m.utilMem
       row[`tempC_d${m.deviceId}`] = m.tempC
@@ -58,7 +60,7 @@ export default function MetricsChart({ hostData, deviceData, globalRange, highli
       row[`fanSpeedPct_d${m.deviceId}`] = m.fanSpeedPct
       byTs.set(key, row)
     }
-    return Array.from(byTs.values()).sort((a, b) => a.ts_rel_ms - b.ts_rel_ms)
+    return Array.from(byTs.values()).sort((a, b) => a.ts_rel_us - b.ts_rel_us)
   }, [deviceData, globalRange])
 
   const deviceIds = useMemo(() => {
@@ -68,50 +70,54 @@ export default function MetricsChart({ hostData, deviceData, globalRange, highli
 
   const domain = useMemo(() => {
     if (globalRange) {
-      const durationMs = nsToMs(globalRange.end_ns - globalRange.start_ns)
-      return [0, Math.max(durationMs, 1)] // Min 1ms range
+      const durationUs = nsToUs(globalRange.end_ns - globalRange.start_ns)
+      return [0, Math.max(durationUs, 1)] // Min 1us range
     }
     return ['dataMin', 'dataMax']
   }, [globalRange])
 
   const ticks = useMemo(() => {
     if (!globalRange) return undefined
-    const durationMs = nsToMs(globalRange.end_ns - globalRange.start_ns)
+    const durationUs = nsToUs(globalRange.end_ns - globalRange.start_ns)
     
     // Choose a step that results in reasonable number of ticks
-    let step = 100
-    if (durationMs > 5000) step = 200
-    if (durationMs > 10000) step = 500
-    if (durationMs > 20000) step = 1000
-    if (durationMs > 50000) step = 2000
-    if (durationMs > 100000) step = 5000
+    let step = 100 // 100us
+    if (durationUs > 1000) step = 200 // 200us
+    if (durationUs > 5000) step = 500 // 500us
+    if (durationUs > 10000) step = 1000 // 1ms
+    if (durationUs > 50000) step = 5000 // 5ms
+    if (durationUs > 100000) step = 10000 // 10ms
+    if (durationUs > 500000) step = 50000 // 50ms
 
-    const tickCount = Math.floor(durationMs / step)
+    const tickCount = Math.floor(durationUs / step)
     if (tickCount > 0 && tickCount < 200) {
       return Array.from({ length: tickCount + 1 }, (_, i) => i * step)
     }
     return undefined // Fallback to automatic ticks
   }, [globalRange])
 
-  const formatRelTime = (ms: number) => {
-    return `${(ms / 1000).toFixed(3)}s`
+  const formatRelTime = (us: number) => {
+    if (us < 1000) return `${us.toFixed(0)}us`
+    if (us < 1000000) return `${(us / 1000).toFixed(1)}ms`
+    return `${(us / 1000000).toFixed(3)}s`
   }
 
-  const formatAbsTime = (ms: number) => {
+  const formatAbsTime = (us: number) => {
     if (!globalRange) return ''
-    const absMs = nsToMs(globalRange.start_ns) + ms
+    const absMs = (globalRange.start_ns + (us * 1000)) / 1_000_000
     const date = new Date(absMs)
     const timeStr = date.toLocaleTimeString([], { hour12: false })
     const msStr = String(date.getMilliseconds()).padStart(3, '0')
-    return `${timeStr}.${msStr}`
+    const usRemainder = Math.floor((absMs % 1) * 1000)
+    return `${timeStr}.${msStr}.${String(usRemainder).padStart(3, '0')}`
   }
 
   const highlightArea = useMemo(() => {
     if (!highlightRange || !globalRange) return null
     return (
       <ReferenceArea
-        x1={nsToMs(highlightRange.start_ns - globalRange.start_ns)}
-        x2={nsToMs(highlightRange.end_ns - globalRange.start_ns)}
+        x1={nsToUs(highlightRange.start_ns - globalRange.start_ns)}
+        x2={nsToUs(highlightRange.end_ns - globalRange.start_ns)}
         strokeOpacity={0.3}
         fill="#f59e0b"
         fillOpacity={0.15}
@@ -142,7 +148,7 @@ export default function MetricsChart({ hostData, deviceData, globalRange, highli
             <LineChart data={hostChartData} margin={{ top: 10, right: 20, left: 0, bottom: 10 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
               <XAxis
-                dataKey="ts_rel_ms"
+                dataKey="ts_rel_us"
                 type="number"
                 domain={domain}
                 ticks={ticks}
@@ -181,7 +187,7 @@ export default function MetricsChart({ hostData, deviceData, globalRange, highli
             <LineChart data={deviceChartData} margin={{ top: 10, right: 20, left: 0, bottom: 10 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
               <XAxis
-                dataKey="ts_rel_ms"
+                dataKey="ts_rel_us"
                 type="number"
                 domain={domain}
                 ticks={ticks}

@@ -1,6 +1,7 @@
 import React, { useMemo } from 'react'
-import { Card, Col, Row, Space, Tag } from 'antd'
-import { useParams } from 'react-router-dom'
+import { Card, Col, Row, Space, Tag, Button } from 'antd'
+import { useParams, useNavigate } from 'react-router-dom'
+import { ArrowLeftOutlined } from '@ant-design/icons'
 import { useStore } from '@/store/useStore'
 import MetricsChart from '@/components/MetricsChart'
 import TimelineView from '@/components/TimelineView'
@@ -8,6 +9,7 @@ import Inspector from '@/components/Inspector'
 
 export default function Dashboard() {
   const { sessionId } = useParams()
+  const navigate = useNavigate()
   const sessions = useStore((s) => s.sessions)
   const events = useStore((s) => s.events)
   const hostMetrics = useStore((s) => s.hostMetrics)
@@ -31,10 +33,18 @@ export default function Dashboard() {
   return (
     <div style={{ height: 'calc(100vh - 96px)', overflow: 'hidden' }}>
       <Row gutter={12} style={{ height: '100%' }}>
-        <Col span={18} style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
+        <Col span={24} style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
           <Card size="small" style={{ background: '#0f1318', marginBottom: 12 }}>
             <Space>
-              <div style={{ fontSize: 16, fontWeight: 600 }}>{session?.appName ?? 'Session'}</div>
+              <Button 
+                type="text" 
+                icon={<ArrowLeftOutlined />} 
+                onClick={() => navigate('/')}
+                style={{ color: '#9ca3af', paddingLeft: 0 }}
+              >
+                Back
+              </Button>
+              <div style={{ fontSize: 16, fontWeight: 600, marginLeft: 8 }}>{session?.appName ?? 'Session'}</div>
               <Tag color="geekblue">{session?.sessionId}</Tag>
               <Tag color="cyan">GPUs: {session?.gpuCount}</Tag>
               <Tag color="purple">Events: {session?.totalEvents}</Tag>
@@ -44,15 +54,20 @@ export default function Dashboard() {
             <Card title="System Metrics" size="small" style={{ background: '#0f1318', marginBottom: 12 }}>
               <MetricsChart hostData={hostMetrics} deviceData={deviceMetrics} globalRange={globalRange} highlightRange={highlightRange} />
             </Card>
-            <Card title="Timeline" size="small" style={{ background: '#0f1318', height: 400 }}>
-              <div style={{ height: '100%' }}>
-                <TimelineView events={sessionEvents} globalRange={globalRange} />
-              </div>
-            </Card>
+            
+            <Row gutter={12} style={{ height: 500 }}>
+              <Col span={18} style={{ height: '100%' }}>
+                <Card title="Timeline" size="small" style={{ background: '#0f1318', height: '100%' }}>
+                  <div style={{ height: '100%' }}>
+                    <TimelineView events={sessionEvents} globalRange={globalRange} />
+                  </div>
+                </Card>
+              </Col>
+              <Col span={6} style={{ height: '100%' }}>
+                <Inspector />
+              </Col>
+            </Row>
           </div>
-        </Col>
-        <Col span={6} style={{ height: '100%' }}>
-          <Inspector />
         </Col>
       </Row>
     </div>
