@@ -63,49 +63,87 @@ export const useStore = create<AppState>((set, get) => ({
       }));
 
       const events: TraceEvent[] = data.flatMap(s => {
-        const kernels: TraceEvent[] = s.kernels.map((k: any) => ({
-          id: k.id,
-          sessionId: s.sessionId,
-          type: 'kernel' as const,
-          name: k.name,
-          ts_ns: k.startNs,
-          duration_ns: k.durationNs,
-          user_scope: k.userScope,
-          stack_trace: k.stackTrace,
-          stream_id: k.streamId || 0, // Fallback to 0 if not present
-          grid: k.grid,
-          block: k.block,
-        }));
+        const kernels: TraceEvent[] = s.kernels.map((k: any) => {
+          const apiStart = k.apiStartNs ?? k.startNs;
+          const apiExit = k.apiExitNs ?? apiStart;
+          const gpuStart = k.startNs;
+          const gpuEnd = k.endNs;
 
-        const scopes: TraceEvent[] = s.scopes.map((sc: any) => ({
-          id: sc.id,
-          sessionId: s.sessionId,
-          type: 'scope' as const,
-          name: sc.name,
-          ts_ns: sc.tsNs,
-          duration_ns: sc.durationNs || 0,
-          user_scope: sc.userScope,
-          depth: sc.scopeDepth,
-        })).sort((a, b) => a.ts_ns - b.ts_ns);
+          const totalDuration = Math.max(gpuEnd, apiExit) - apiStart;
+          const gpuExecution = gpuEnd - gpuStart;
+          const cpuOverhead = apiExit - apiStart;
+          const queueLatency = Math.max(0, gpuStart - apiExit);
 
-        // Estimate duration if missing
+          return {
+            id: k.id,
+            sessionId: s.sessionId,
+            type: 'kernel' as const,
+            name: k.name,
+            ts_ns: apiStart,
+            duration_ns: gpuExecution,
+            total_duration_ns: totalDuration,
+            cpu_overhead_ns: cpuOverhead,
+            queue_latency_ns: queueLatency,
+            api_duration_ns: cpuOverhead, // legacy
+            launch_latency_ns: queueLatency, // legacy
+            start_ns: gpuStart,
+            end_ns: gpuEnd,
+            apiStartNs: k.apiStartNs,
+            apiExitNs: k.apiExitNs,
+            user_scope: k.userScope,
+            stack_trace: k.stackTrace,
+            stream_id: k.streamId ?? k.deviceId ?? 0,
+            grid: k.grid,
+            block: k.block,
+          };
+        });
+
+        const scopes: TraceEvent[] = s.scopes.map((sc: any) => {
+          const start = sc.startNs ?? sc.tsNs;
+          const end = sc.endNs ?? (start + (sc.durationNs || 0));
+          const duration = end - start;
+
+          return {
+            id: sc.id,
+            sessionId: s.sessionId,
+            type: 'scope' as const,
+            name: sc.name,
+            ts_ns: start,
+            duration_ns: duration,
+            total_duration_ns: duration,
+            start_ns: start,
+            end_ns: end,
+            user_scope: sc.userScope,
+            depth: sc.scopeDepth,
+          };
+        }).sort((a, b) => a.ts_ns - b.ts_ns);
+
+        // Ensure minimum duration if 0
         for (let i = 0; i < scopes.length; i++) {
-          if (scopes[i].duration_ns === 0) {
-            // Find next scope at same or parent depth
-            const next = scopes.slice(i + 1).find(ns => (ns.depth || 0) <= (scopes[i].depth || 0));
-            if (next) {
-              scopes[i].duration_ns = next.ts_ns - scopes[i].ts_ns;
-            } else if (s.shutdownTsNs) {
-              scopes[i].duration_ns = s.shutdownTsNs - scopes[i].ts_ns;
-            }
-            
-            // Ensure minimum duration
-            if (scopes[i].duration_ns <= 0) scopes[i].duration_ns = 1000; 
+          if (scopes[i].duration_ns <= 0) {
+            scopes[i].duration_ns = 1000; // 1us fallback
           }
         }
 
         return [...kernels, ...scopes];
       });
+
+      // Post-process to find parent-child relationships
+      for (const e of events) {
+        if (e.type === 'kernel' && e.user_scope) {
+          // Find the scope that matches the kernel's user_scope
+          // Try exact match first, then try matching the last part of a pipe-separated path
+          const leafName = e.user_scope.split('|').pop();
+          const parent = events.find(s => 
+            s.type === 'scope' && 
+            s.sessionId === e.sessionId && 
+            (s.name === e.user_scope || (leafName && s.name === leafName))
+          );
+          if (parent) {
+            e.parent_scope_id = parent.id;
+          }
+        }
+      }
 
       set({
         sessions,
@@ -158,11 +196,11 @@ export const useStore = create<AppState>((set, get) => ({
         }
       }
 
-      // Ensure minimum duration of 1ms
-      if (startNs && endNs && endNs - startNs < 1_000_000) {
+      // Ensure minimum duration of 1us
+      if (startNs && endNs && endNs - startNs < 1_000) {
         const center = (startNs + endNs) / 2;
-        startNs = center - 500_000;
-        endNs = center + 500_000;
+        startNs = center - 500;
+        endNs = center + 500;
       }
 
       set({
@@ -184,9 +222,10 @@ export const useStore = create<AppState>((set, get) => ({
     if (!id) return set({ activeEventId: undefined, highlightRange: undefined });
     const ev = get().events.find((e) => e.id === id);
     if (!ev) return;
+    
     set({
       activeEventId: id,
-      highlightRange: { start_ns: ev.ts_ns, end_ns: ev.ts_ns + ev.duration_ns },
+      highlightRange: { start_ns: ev.ts_ns, end_ns: ev.ts_ns + (ev.total_duration_ns ?? ev.duration_ns) },
     });
   },
   setMetricVisibility: (key, visible) =>
@@ -200,8 +239,9 @@ export const useStore = create<AppState>((set, get) => ({
     let maxNs = -Infinity;
 
     for (const e of sessionEvents) {
+      const end_ns = e.ts_ns + (e.total_duration_ns ?? e.duration_ns);
       if (e.ts_ns < minNs) minNs = e.ts_ns;
-      if (e.ts_ns + e.duration_ns > maxNs) maxNs = e.ts_ns + e.duration_ns;
+      if (end_ns > maxNs) maxNs = end_ns;
     }
 
     for (const m of hostMetrics) {
@@ -215,11 +255,11 @@ export const useStore = create<AppState>((set, get) => ({
     }
 
     if (minNs !== Infinity && maxNs !== -Infinity) {
-      // Ensure at least 1ms
-      if (maxNs - minNs < 1_000_000) {
+      // Ensure at least 1us
+      if (maxNs - minNs < 1_000) {
         const center = (minNs + maxNs) / 2;
-        minNs = center - 500_000;
-        maxNs = center + 500_000;
+        minNs = center - 500;
+        maxNs = center + 500;
       }
       set({ globalRange: { start_ns: minNs, end_ns: maxNs } });
     }

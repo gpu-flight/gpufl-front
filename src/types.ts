@@ -13,8 +13,17 @@ export interface TraceEvent {
   sessionId: string;
   type: TraceEventType;
   name: string;
-  ts_ns: number;       // Start time in nanoseconds
-  duration_ns: number; // Duration in nanoseconds
+  ts_ns: number;       // Display start time (apiStartNs)
+  duration_ns: number; // GPU Execution (end_ns - start_ns)
+  total_duration_ns?: number; // Total Duration (Max(end, api_exit) - api_start)
+  cpu_overhead_ns?: number;   // CPU Overhead (apiExitNs - apiStartNs)
+  queue_latency_ns?: number;  // Queue Latency (Max(0, start_ns - apiExitNs))
+  api_duration_ns?: number; // Obsolete but keeping for compatibility if needed, though we should prefer cpu_overhead_ns
+  launch_latency_ns?: number; // Obsolete but keeping for compatibility
+  start_ns: number;    // Internal start time (GPU)
+  end_ns: number;      // Internal end time (GPU)
+  apiStartNs?: number;
+  apiExitNs?: number;
   user_scope: string;  // e.g., "Training|Epoch1|Forward"
   stack_trace?: string; // e.g., "main|funcA|funcB" (Raw stack)
 
@@ -25,6 +34,9 @@ export interface TraceEvent {
 
   // For Scopes only
   depth?: number;
+  
+  // Relationships
+  parent_scope_id?: string;
 }
 
 export interface HostMetricSample {
