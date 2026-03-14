@@ -4,17 +4,30 @@ import { createBrowserRouter, RouterProvider } from 'react-router-dom'
 import App from './App'
 import SessionList from './pages/SessionList'
 import Dashboard from './pages/Dashboard'
+import LoginPage from './pages/LoginPage'
+import RegisterPage from './pages/RegisterPage'
+import ApiKeysPage from './pages/ApiKeysPage'
+import ProtectedRoute from './components/ProtectedRoute'
 import ErrorBoundary from './components/ErrorBoundary'
 import 'antd/dist/reset.css'
-import 'vis-timeline/styles/vis-timeline-graph2d.min.css'
 import './styles.css'
 
 const router = createBrowserRouter([
   {
+    path: '/login',
+    element: <LoginPage />,
+  },
+  {
+    path: '/register',
+    element: <RegisterPage />,
+  },
+  {
     path: '/',
     element: (
       <ErrorBoundary>
-        <App />
+        <ProtectedRoute>
+          <App />
+        </ProtectedRoute>
       </ErrorBoundary>
     ),
     errorElement: (
@@ -27,6 +40,7 @@ const router = createBrowserRouter([
     children: [
       { index: true, element: <SessionList /> },
       { path: 'dashboard/:sessionId', element: <Dashboard /> },
+      { path: 'api-keys', element: <ApiKeysPage /> },
     ],
   },
 ])

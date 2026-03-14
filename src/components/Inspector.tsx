@@ -2,6 +2,7 @@ import React, { useMemo, useEffect, useRef } from 'react'
 import { Card, Descriptions, Typography, Divider, Collapse, Tooltip, Button, Space } from 'antd'
 import { InfoCircleOutlined, ArrowRightOutlined } from '@ant-design/icons'
 import { useStore } from '@/store/useStore'
+import { formatWallClock, fmtRelNs } from '@/utils/timeFormat'
 
 function formatDuration(ns: number) {
   const us = ns / 1000
@@ -11,12 +12,15 @@ function formatDuration(ns: number) {
   return `${(ms / 1000).toFixed(2)} s`
 }
 
-function formatTimestamp(ns: number) {
-  const nsStr = `${ns.toLocaleString()} ns`
-  const ms = ns / 1_000_000
+function formatTimestamp(ns: number, sessionStartNs?: number) {
   return (
     <span>
-      {nsStr} <Typography.Text type="secondary" style={{ fontSize: '10px' }}>({ms.toFixed(3)} ms)</Typography.Text>
+      {formatWallClock(ns)}
+      {sessionStartNs != null && (
+        <Typography.Text type="secondary" style={{ fontSize: '10px', marginLeft: 6 }}>
+          (t+{fmtRelNs(ns - sessionStartNs)})
+        </Typography.Text>
+      )}
     </span>
   )
 }
@@ -24,11 +28,14 @@ function formatTimestamp(ns: number) {
 export default function Inspector() {
   const activeEventId = useStore((s) => s.activeEventId)
   const setActiveEvent = useStore((s) => s.setActiveEvent)
+  const jumpToScope = useStore((s) => s.jumpToScope)
   const events = useStore((s) => s.events)
   const currentSessionId = useStore((s) => s.currentSessionId)
+  const globalRange = useStore((s) => s.globalRange)
+  const sessionStartNs = globalRange?.start_ns
 
   const sessionEvents = useMemo(() => {
-    return events.filter(e => e.sessionId === currentSessionId)
+    return events.filter(e => e.sessionId === currentSessionId && e.type === 'kernel')
   }, [events, currentSessionId])
 
   const scrollRef = useRef<Record<string, HTMLDivElement | null>>({})
@@ -56,7 +63,7 @@ export default function Inspector() {
         ghost
       >
         {sessionEvents.map((e) => {
-          const stack = e.stack_trace ? e.stack_trace.split('|') : []
+          const stack = e.stack_trace ? e.stack_trace.split('|').filter(f => f.trim()) : []
           return (
             <Collapse.Panel
               header={
@@ -72,7 +79,7 @@ export default function Inspector() {
               <Descriptions size="small" column={1} bordered>
                 <Descriptions.Item label="Name">{e.name}</Descriptions.Item>
                 <Descriptions.Item label="Type">{e.type}</Descriptions.Item>
-                <Descriptions.Item label="Display Start">{formatTimestamp(e.ts_ns)}</Descriptions.Item>
+                <Descriptions.Item label="Start">{formatTimestamp(e.ts_ns, sessionStartNs)}</Descriptions.Item>
                 
                 {e.type === 'kernel' && (
                   <>
@@ -132,13 +139,13 @@ export default function Inspector() {
                 )}
 
                 {e.apiStartNs != null && (
-                  <Descriptions.Item label="API Start">{formatTimestamp(e.apiStartNs)}</Descriptions.Item>
+                  <Descriptions.Item label="API Start">{formatTimestamp(e.apiStartNs, sessionStartNs)}</Descriptions.Item>
                 )}
                 {e.apiExitNs != null && (
-                  <Descriptions.Item label="API Exit">{formatTimestamp(e.apiExitNs)}</Descriptions.Item>
+                  <Descriptions.Item label="API Exit">{formatTimestamp(e.apiExitNs, sessionStartNs)}</Descriptions.Item>
                 )}
-                <Descriptions.Item label="GPU Start">{formatTimestamp(e.start_ns)}</Descriptions.Item>
-                <Descriptions.Item label="GPU End">{formatTimestamp(e.end_ns)}</Descriptions.Item>
+                <Descriptions.Item label="GPU Start">{formatTimestamp(e.start_ns, sessionStartNs)}</Descriptions.Item>
+                <Descriptions.Item label="GPU End">{formatTimestamp(e.end_ns, sessionStartNs)}</Descriptions.Item>
                 {e.stream_id != null && (
                   <Descriptions.Item label="Stream ID">{e.stream_id}</Descriptions.Item>
                 )}
@@ -149,13 +156,13 @@ export default function Inspector() {
                     <Space>
                       {e.user_scope}
                       {e.parent_scope_id && (
-                        <Button 
-                          type="link" 
-                          size="small" 
-                          icon={<ArrowRightOutlined />} 
+                        <Button
+                          type="link"
+                          size="small"
+                          icon={<ArrowRightOutlined />}
                           onClick={(ev) => {
                             ev.stopPropagation();
-                            setActiveEvent(e.parent_scope_id);
+                            if (e.parent_scope_id) jumpToScope(e.parent_scope_id);
                           }}
                         >
                           Jump to Scope

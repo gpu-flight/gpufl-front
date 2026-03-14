@@ -1,9 +1,23 @@
+export interface CudaGpuInfo {
+  deviceId: number;
+  name: string;
+  uuid: string;
+  computeMajor: string;
+  computeMinor: string;
+  multiProcessorCount: number;
+  warpSize: number;
+}
+
 export interface Session {
   sessionId: string;
   appName: string;
-  startTime: number; // Unix timestamp
+  startTime: number; // Unix timestamp (seconds)
+  endTime?: number;  // Unix timestamp (seconds), absent if still running
   totalEvents: number;
   gpuCount: number;
+  hostname?: string;
+  ipAddr?: string;
+  gpus?: CudaGpuInfo[];
 }
 
 export type TraceEventType = 'kernel' | 'scope';
@@ -87,3 +101,40 @@ export interface RawSession {
 }
 
 export type InitResponse = RawSession[];
+
+// Host summary from GET /api/v1/events/hosts
+export interface SessionSummary {
+  sessionId: string;
+  appName: string;
+  startTime: string; // ISO instant
+  endTime?: string;
+  gpus: CudaGpuInfo[];
+}
+
+export interface HostSummary {
+  hostname: string;
+  ipAddr?: string;
+  sessions: SessionSummary[];
+}
+
+export interface ProfileSample {
+  id: string;
+  sessionId: string;
+  scopeId?: string;
+  tsNs: number;
+  deviceId: number;
+  corrId: number;
+  sampleKind: 'sass_metric' | 'pc_sampling';
+  // sass_metric fields
+  metricName?: string;
+  metricValue?: number;
+  pcOffset?: string;
+  // shared
+  functionName?: string;
+  sourceFile?: string;
+  sourceLine?: number;
+  // pc_sampling fields
+  sampleCount?: number;
+  stallReason?: number;
+  reasonName?: string;
+}
