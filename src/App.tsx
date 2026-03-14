@@ -1,16 +1,25 @@
 import React, { useEffect } from 'react'
-import { Outlet, Link } from 'react-router-dom'
+import { Outlet, Link, useNavigate } from 'react-router-dom'
 import { ConfigProvider, theme, Layout, Button } from 'antd'
-import { HomeOutlined } from '@ant-design/icons'
+import { HomeOutlined, LogoutOutlined, KeyOutlined } from '@ant-design/icons'
 import { useStore } from './store/useStore'
+import { useAuthStore } from './store/useAuthStore'
 
 const { Header, Content } = Layout
 
 export default function App() {
   const fetchInit = useStore((s) => s.fetchInit)
+  const logout = useAuthStore((s) => s.logout)
+  const username = useAuthStore((s) => s.username)
+  const navigate = useNavigate()
   useEffect(() => {
     fetchInit()
   }, [fetchInit])
+
+  const handleLogout = () => {
+    logout()
+    navigate('/login')
+  }
 
   return (
     <ConfigProvider
@@ -27,11 +36,24 @@ export default function App() {
           <Link to="/" style={{ color: 'inherit', textDecoration: 'none', display: 'flex', alignItems: 'center' }}>
             <div style={{ fontWeight: 700, fontSize: '18px' }}>GPUFL Portal</div>
           </Link>
-          <Link to="/">
-            <Button type="text" icon={<HomeOutlined />} style={{ color: '#9ca3af' }}>
-              Home
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <Link to="/">
+              <Button type="text" icon={<HomeOutlined />} style={{ color: '#9ca3af' }}>
+                Home
+              </Button>
+            </Link>
+            <Link to="/api-keys">
+              <Button type="text" icon={<KeyOutlined />} style={{ color: '#9ca3af' }}>
+                API Keys
+              </Button>
+            </Link>
+            {username && (
+              <span style={{ color: '#9ca3af', fontSize: 13 }}>{username}</span>
+            )}
+            <Button type="text" icon={<LogoutOutlined />} style={{ color: '#9ca3af' }} onClick={handleLogout}>
+              Logout
             </Button>
-          </Link>
+          </div>
         </Header>
         <Content style={{ padding: 16 }}>
           <Outlet />

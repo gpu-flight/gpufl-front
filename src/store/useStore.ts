@@ -1,40 +1,56 @@
 import { create } from 'zustand';
-import { Session, TraceEvent, HostMetricSample, DeviceMetricSample, InitResponse, SystemMetricsResponse } from '@/types';
+import { Session, TraceEvent, HostMetricSample, DeviceMetricSample, InitResponse, SystemMetricsResponse, HostSummary, ProfileSample } from '@/types';
+import { apiFetch } from '@/api';
 
 export type HostMetricKey = 'cpuPct' | 'ramUsedMib' | 'ramTotalMib';
 export type DeviceMetricKey = 'utilGpu' | 'utilMem' | 'tempC' | 'memUsedMib' | 'memTotalMib' | 'powerW' | 'fanSpeedPct';
 export type MetricKey = HostMetricKey | DeviceMetricKey;
 
 interface AppState {
+  hosts: HostSummary[];
   sessions: Session[];
   events: TraceEvent[];
   hostMetrics: HostMetricSample[];
   deviceMetrics: DeviceMetricSample[];
+  profileSamples: ProfileSample[];
   metricsRange?: { start_ns: number; end_ns: number };
   globalRange?: { start_ns: number; end_ns: number };
   currentSessionId?: string;
   activeEventId?: string;
   highlightRange?: { start_ns: number; end_ns: number };
   metricVisibility: Record<MetricKey, boolean>;
+  activeTab: 'kernels' | 'scopes' | 'system';
+  comparedScopeIds: string[];
+  metricsZoomRange?: [number, number];
+  activeScopeKey?: string;
 
   // derived
   currentSession?: Session;
   activeEvent?: TraceEvent;
 
   // actions
+  fetchHosts: () => Promise<void>;
   fetchInit: () => Promise<void>;
   fetchSystemMetrics: (sessionId: string) => Promise<void>;
+  fetchProfileSamples: (sessionId: string) => Promise<void>;
   selectSession: (id: string) => void;
   setActiveEvent: (id?: string) => void;
   setMetricVisibility: (key: MetricKey, visible: boolean) => void;
   updateGlobalRange: () => void;
+  setActiveTab: (tab: 'kernels' | 'scopes' | 'system') => void;
+  toggleComparedScope: (id: string) => void;
+  setMetricsZoom: (range?: [number, number]) => void;
+  setActiveScopeKey: (key?: string) => void;
+  jumpToScope: (scopeId: string) => void;
 }
 
 export const useStore = create<AppState>((set, get) => ({
+  hosts: [],
   sessions: [],
   events: [],
   hostMetrics: [],
   deviceMetrics: [],
+  profileSamples: [],
   metricsRange: undefined,
   globalRange: undefined,
   metricVisibility: {
@@ -49,17 +65,43 @@ export const useStore = create<AppState>((set, get) => ({
     powerW: true,
     fanSpeedPct: false,
   },
+  activeTab: 'kernels' as 'kernels' | 'scopes' | 'system',
+  comparedScopeIds: [],
+  metricsZoomRange: undefined,
+  activeScopeKey: undefined,
+  fetchHosts: async () => {
+    try {
+      const res = await apiFetch('/api/v1/events/hosts');
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data: HostSummary[] = await res.json();
+      set({ hosts: data });
+    } catch (err) {
+      console.error('Failed to fetch hosts', err);
+    }
+  },
   fetchInit: async () => {
     try {
-      const res = await fetch('http://localhost:8080/api/v1/events/init');
+      const res = await apiFetch('/api/v1/events/init');
       const data: InitResponse = await res.json();
       
       const sessions: Session[] = data.map(s => ({
         sessionId: s.sessionId,
         appName: s.app,
         startTime: s.tsNs / 1_000_000_000,
+        endTime: s.shutdownTsNs ? s.shutdownTsNs / 1_000_000_000 : undefined,
         totalEvents: s.kernels.length + s.scopes.length,
         gpuCount: s.cudaStaticDevices.length,
+        hostname: s.hostMetrics?.[0]?.hostname,
+        ipAddr: s.hostMetrics?.[0]?.ipAddr,
+        gpus: s.cudaStaticDevices?.map((d: any) => ({
+          deviceId: d.deviceId,
+          name: d.name,
+          uuid: d.uuid,
+          computeMajor: d.computeMajor,
+          computeMinor: d.computeMinor,
+          multiProcessorCount: d.multiProcessorCount,
+          warpSize: d.warpSize,
+        })),
       }));
 
       const events: TraceEvent[] = data.flatMap(s => {
@@ -156,7 +198,7 @@ export const useStore = create<AppState>((set, get) => ({
   },
   fetchSystemMetrics: async (sessionId: string) => {
     try {
-      const res = await fetch(`http://localhost:8080/api/v1/events/system?sessionId=${sessionId}`);
+      const res = await apiFetch(`/api/v1/events/system?sessionId=${sessionId}`);
       if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
       const rawData = await res.json();
       
@@ -214,6 +256,16 @@ export const useStore = create<AppState>((set, get) => ({
       set({ hostMetrics: [], deviceMetrics: [], metricsRange: undefined });
     }
   },
+  fetchProfileSamples: async (sessionId: string) => {
+    try {
+      const res = await apiFetch(`/api/v1/events/profile-samples?sessionId=${sessionId}`);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data: ProfileSample[] = await res.json();
+      set({ profileSamples: data });
+    } catch (err) {
+      console.error('Failed to fetch profile samples', err);
+    }
+  },
   selectSession: (id: string) => {
     set({ currentSessionId: id });
     get().updateGlobalRange();
@@ -230,6 +282,27 @@ export const useStore = create<AppState>((set, get) => ({
   },
   setMetricVisibility: (key, visible) =>
     set((s) => ({ metricVisibility: { ...s.metricVisibility, [key]: visible } })),
+  setActiveTab: (tab) => set({ activeTab: tab }),
+  toggleComparedScope: (id) =>
+    set((s) => {
+      const idx = s.comparedScopeIds.indexOf(id);
+      if (idx >= 0) return { comparedScopeIds: s.comparedScopeIds.filter((x) => x !== id) };
+      if (s.comparedScopeIds.length >= 3) return {};
+      return { comparedScopeIds: [...s.comparedScopeIds, id] };
+    }),
+  setMetricsZoom: (range) => set({ metricsZoomRange: range }),
+  setActiveScopeKey: (key) => set({ activeScopeKey: key }),
+  jumpToScope: (scopeId) => {
+    const state = get();
+    const scope = state.events.find((e) => e.id === scopeId);
+    if (!scope) return;
+    set({
+      activeEventId: scopeId,
+      highlightRange: { start_ns: scope.ts_ns, end_ns: scope.ts_ns + scope.duration_ns },
+      activeTab: 'scopes',
+      activeScopeKey: scope.user_scope || scope.name,
+    });
+  },
   updateGlobalRange: () => {
     const { events, hostMetrics, deviceMetrics, currentSessionId } = get();
     if (!currentSessionId) return;

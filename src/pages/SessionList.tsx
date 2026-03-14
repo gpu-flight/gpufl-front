@@ -1,48 +1,219 @@
-import React, { useMemo } from 'react'
-import { Button, Table } from 'antd'
+import React, { useEffect, useState } from 'react'
+import { Button, Tag, Typography, Table, Empty, Spin } from 'antd'
 import type { ColumnsType } from 'antd/es/table'
 import { useNavigate } from 'react-router-dom'
+import { DesktopOutlined, RightOutlined } from '@ant-design/icons'
 import { useStore } from '@/store/useStore'
-import { Session } from '@/types'
+import { SessionSummary, CudaGpuInfo } from '@/types'
 import dayjs from 'dayjs'
 
+const { Text } = Typography
+
+function GpuCard({
+  gpu,
+  selected,
+  onClick,
+}: {
+  gpu: CudaGpuInfo
+  selected: boolean
+  onClick: () => void
+}) {
+  return (
+    <div
+      className={`gpu-card${selected ? ' gpu-card-selected' : ''}`}
+      onClick={onClick}
+    >
+      <div className="gpu-card-id">GPU {gpu.deviceId}</div>
+      <div className="gpu-card-name" title={gpu.name}>{gpu.name}</div>
+      <div className="gpu-card-meta">
+        <Tag style={{ fontSize: 10 }}>SM {gpu.computeMajor}.{gpu.computeMinor}</Tag>
+        <Tag style={{ fontSize: 10 }}>{gpu.multiProcessorCount} MPs</Tag>
+      </div>
+    </div>
+  )
+}
+
+const sessionColumns: ColumnsType<SessionSummary> = [
+  {
+    title: 'App',
+    dataIndex: 'appName',
+    key: 'appName',
+    render: (v: string) => <Text strong>{v}</Text>,
+  },
+  {
+    title: 'Session ID',
+    dataIndex: 'sessionId',
+    key: 'sessionId',
+    render: (v: string) => (
+      <Text type="secondary" style={{ fontFamily: 'monospace', fontSize: 11 }}>
+        {v}
+      </Text>
+    ),
+  },
+  {
+    title: 'Start Time',
+    dataIndex: 'startTime',
+    key: 'startTime',
+    render: (v: string) => dayjs(v).format('YYYY-MM-DD HH:mm:ss'),
+  },
+  {
+    title: 'End Time',
+    dataIndex: 'endTime',
+    key: 'endTime',
+    render: (v?: string) => v ? dayjs(v).format('HH:mm:ss') : <Text type="secondary">running</Text>,
+  },
+  {
+    title: 'GPUs',
+    key: 'gpus',
+    render: (_: unknown, record: SessionSummary) => (
+      <Text type="secondary" style={{ fontSize: 11 }}>
+        {record.gpus.map(g => g.name).filter((v, i, a) => a.indexOf(v) === i).join(', ') || '—'}
+      </Text>
+    ),
+  },
+]
+
 export default function SessionList() {
-  const sessions = useStore((s) => s.sessions)
+  const hosts = useStore((s) => s.hosts)
+  const fetchHosts = useStore((s) => s.fetchHosts)
   const navigate = useNavigate()
 
-  const columns: ColumnsType<Session> = useMemo(
-    () => [
-      { title: 'App Name', dataIndex: 'appName', key: 'appName' },
-      { title: 'Session ID', dataIndex: 'sessionId', key: 'sessionId' },
-      {
-        title: 'Start Time',
-        dataIndex: 'startTime',
-        key: 'startTime',
-        render: (v: number) => dayjs.unix(v).format('YYYY-MM-DD HH:mm:ss'),
-      },
-      { title: 'GPU Count', dataIndex: 'gpuCount', key: 'gpuCount' },
-      {
-        title: 'Actions',
-        key: 'actions',
-        render: (_, record) => (
-          <Button type="primary" onClick={() => navigate(`/dashboard/${record.sessionId}`)}>
-            View Dashboard
-          </Button>
-        ),
-      },
-    ],
-    [navigate],
-  )
+  const [loading, setLoading] = useState(false)
+  // selectedGpuKey: `${hostname}::${deviceId}` — null means show all sessions for the host
+  const [selectedGpuKey, setSelectedGpuKey] = useState<string | null>(null)
+  const [expandedHost, setExpandedHost] = useState<string | null>(null)
+
+  useEffect(() => {
+    setLoading(true)
+    fetchHosts().finally(() => setLoading(false))
+  }, [fetchHosts])
+
+  const viewColumn: ColumnsType<SessionSummary>[number] = {
+    title: '',
+    key: 'actions',
+    align: 'right' as const,
+    render: (_: unknown, record: SessionSummary) => (
+      <Button
+        type="primary"
+        size="small"
+        icon={<RightOutlined />}
+        onClick={() => {
+          // Also trigger init load so the dashboard has event data
+          navigate(`/dashboard/${record.sessionId}`)
+        }}
+      >
+        View
+      </Button>
+    ),
+  }
+
+  if (loading) {
+    return (
+      <div style={{ padding: 64, textAlign: 'center' }}>
+        <Spin size="large" />
+      </div>
+    )
+  }
+
+  if (hosts.length === 0) {
+    return (
+      <div style={{ padding: 48, textAlign: 'center' }}>
+        <Empty description="No hosts found. Make sure the agent is running and has forwarded at least one init event." />
+      </div>
+    )
+  }
 
   return (
-    <div>
-      <h2 style={{ marginBottom: 16 }}>Sessions</h2>
-      <Table<Session>
-        rowKey={(r) => r.sessionId}
-        columns={columns}
-        dataSource={sessions}
-        pagination={false}
-      />
+    <div style={{ padding: '24px 32px' }}>
+      <Typography.Title level={4} style={{ marginBottom: 24 }}>
+        Host &amp; GPU Selection
+      </Typography.Title>
+
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+        {hosts.map((host) => {
+          const isExpanded = expandedHost === host.hostname
+
+          // Collect unique GPUs across all sessions for this host
+          const gpuMap = new Map<number, CudaGpuInfo>()
+          for (const s of host.sessions) {
+            for (const g of s.gpus) {
+              if (!gpuMap.has(g.deviceId)) gpuMap.set(g.deviceId, g)
+            }
+          }
+          const gpus = Array.from(gpuMap.values()).sort((a, b) => a.deviceId - b.deviceId)
+
+          // Filter sessions by selected GPU (if any)
+          const selectedDeviceId = selectedGpuKey?.startsWith(host.hostname + '::')
+            ? parseInt(selectedGpuKey.split('::')[1])
+            : null
+          const visibleSessions = selectedDeviceId !== null
+            ? host.sessions.filter(s => s.gpus.some(g => g.deviceId === selectedDeviceId))
+            : host.sessions
+
+          return (
+            <div
+              key={host.hostname}
+              className={`host-section${isExpanded ? ' host-section-active' : ''}`}
+            >
+              {/* Host header */}
+              <div
+                className="host-header"
+                onClick={() => {
+                  setExpandedHost(isExpanded ? null : host.hostname)
+                  setSelectedGpuKey(null)
+                }}
+              >
+                <DesktopOutlined style={{ fontSize: 16, color: '#60a5fa', marginRight: 10 }} />
+                <span style={{ fontWeight: 600, fontSize: 15 }}>{host.hostname}</span>
+                {host.ipAddr && (
+                  <Text type="secondary" style={{ fontSize: 12, marginLeft: 10 }}>
+                    {host.ipAddr}
+                  </Text>
+                )}
+                <Tag color="blue" style={{ marginLeft: 12 }}>
+                  {host.sessions.length} session{host.sessions.length !== 1 ? 's' : ''}
+                </Tag>
+                <Tag color="geekblue">
+                  {gpus.length} GPU{gpus.length !== 1 ? 's' : ''}
+                </Tag>
+              </div>
+
+              {/* GPU cards */}
+              {gpus.length > 0 && (
+                <div className="gpu-card-grid">
+                  {gpus.map(gpu => {
+                    const gpuKey = `${host.hostname}::${gpu.deviceId}`
+                    return (
+                      <GpuCard
+                        key={gpu.deviceId}
+                        gpu={gpu}
+                        selected={selectedGpuKey === gpuKey}
+                        onClick={() => {
+                          setExpandedHost(host.hostname)
+                          setSelectedGpuKey(selectedGpuKey === gpuKey ? null : gpuKey)
+                        }}
+                      />
+                    )
+                  })}
+                </div>
+              )}
+
+              {/* Sessions table */}
+              {isExpanded && (
+                <div style={{ marginTop: 16 }}>
+                  <Table<SessionSummary>
+                    rowKey="sessionId"
+                    columns={[...sessionColumns, viewColumn]}
+                    dataSource={visibleSessions}
+                    pagination={false}
+                    size="small"
+                  />
+                </div>
+              )}
+            </div>
+          )
+        })}
+      </div>
     </div>
   )
 }

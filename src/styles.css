@@ -1,54 +1,201 @@
-.vis-timeline .item.kernel-item {
-  background-color: rgba(59, 130, 246, 0.35);
+/* ── Host / GPU Selection ───────────────────────────────────────────────────── */
+.host-section {
+  background: #0f1318;
+  border: 1px solid #1f2937;
+  border-radius: 8px;
+  padding: 16px;
+  transition: border-color 0.15s;
+}
+.host-section-active {
   border-color: #3b82f6;
+}
+.host-header {
+  display: flex;
+  align-items: center;
+  cursor: pointer;
+  user-select: none;
+  padding-bottom: 12px;
+}
+.host-header:hover span {
+  color: #60a5fa;
+}
+.gpu-card-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+.gpu-card {
+  width: 180px;
+  background: #111827;
+  border: 1px solid #1f2937;
+  border-radius: 6px;
+  padding: 12px;
+  cursor: pointer;
+  transition: border-color 0.15s, box-shadow 0.15s;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.gpu-card:hover {
+  border-color: #374151;
+}
+.gpu-card-selected {
+  border-color: #3b82f6 !important;
+  box-shadow: 0 0 10px rgba(59, 130, 246, 0.25);
+}
+.gpu-card-id {
+  font-size: 11px;
+  color: #6b7280;
+  font-family: monospace;
+}
+.gpu-card-name {
+  font-size: 13px;
+  font-weight: 600;
   color: #e5e7eb;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
-.vis-timeline .item.scope-item {
-  background-color: rgba(16, 185, 129, 0.35);
-  border-color: #10b981;
-  color: #e5e7eb;
+.gpu-card-meta {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+  margin: 2px 0;
 }
-.vis-timeline .item.related-item {
-  box-shadow: 0 0 15px #f59e0b;
-  border-width: 2px;
-  border-color: #f59e0b !important;
-  z-index: 100;
+
+/* ── Dashboard Tabs ─────────────────────────────────────────────────────────── */
+.dashboard-tabs {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
 }
-.vis-timeline .item.active-item {
-  box-shadow: 0 0 20px #ef4444;
-  border-width: 3px;
+.dashboard-tabs .ant-tabs-nav {
+  margin-bottom: 8px;
+  flex-shrink: 0;
+}
+.dashboard-tabs .ant-tabs-content-holder {
+  flex: 1;
+  overflow: hidden;
+}
+.dashboard-tabs .ant-tabs-content {
+  height: 100%;
+}
+.dashboard-tabs .ant-tabs-tabpane {
+  height: 100%;
+  overflow: hidden;
+}
+
+/* ── KernelTimeline ─────────────────────────────────────────────────────────── */
+.ktl-row {
+  display: flex;
+  align-items: flex-start;
+  padding: 4px 12px;
+  cursor: pointer;
+  gap: 8px;
+  transition: background 0.1s;
+}
+.ktl-row:hover {
+  background: rgba(255, 255, 255, 0.03);
+}
+.ktl-time {
+  width: 76px;
+  text-align: right;
+  color: #6b7280;
+  font-size: 11px;
+  font-family: monospace;
+  padding-top: 5px;
+  flex-shrink: 0;
+  user-select: none;
+}
+.ktl-arrow {
+  color: #374151;
+  padding-top: 3px;
+  flex-shrink: 0;
+  user-select: none;
+}
+.ktl-card {
+  flex: 1;
+  background: #111827;
+  border: 1px solid #1f2937;
+  border-radius: 4px;
+  padding: 5px 8px;
+  transition: border-color 0.15s;
+  min-width: 0;
+}
+.ktl-row:hover .ktl-card {
+  border-color: #374151;
+}
+.ktl-card-active {
   border-color: #ef4444 !important;
-  z-index: 101;
+  box-shadow: 0 0 8px rgba(239, 68, 68, 0.25);
 }
-/* Vertical guides for alignment */
-.vis-timeline .vis-foreground .vis-group .vis-item.active-item::before,
-.vis-timeline .vis-foreground .vis-group .vis-item.related-item::before {
-  content: '';
-  position: absolute;
-  top: -10000px;
-  bottom: -10000px;
-  left: 0;
-  width: 1px;
-  border-left: 1px dashed rgba(245, 158, 11, 0.5);
-  pointer-events: none;
-  z-index: -1;
+.ktl-card-head {
+  display: flex;
+  align-items: center;
+  margin-bottom: 4px;
 }
-.vis-timeline .vis-foreground .vis-group .vis-item.active-item::after,
-.vis-timeline .vis-foreground .vis-group .vis-item.related-item::after {
-  content: '';
-  position: absolute;
-  top: -10000px;
-  bottom: -10000px;
-  right: 0;
-  width: 1px;
-  border-right: 1px dashed rgba(245, 158, 11, 0.5);
-  pointer-events: none;
-  z-index: -1;
+.ktl-name {
+  font-family: monospace;
+  font-size: 12px;
+  color: #e5e7eb;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 1;
+  min-width: 0;
 }
-.vis-timeline .vis-foreground .vis-group .vis-item.active-item::before,
-.vis-timeline .vis-foreground .vis-group .vis-item.active-item::after {
-  border-color: rgba(239, 68, 68, 0.6);
+.ktl-card-active .ktl-name {
+  color: #fbbf24;
 }
-.vis-timeline .vis-panel.vis-center, .vis-timeline .vis-panel.vis-left, .vis-timeline .vis-panel.vis-right {
-  background: #0b0d10;
+.ktl-bar-track {
+  margin-bottom: 4px;
+  background: #1f2937;
+  border-radius: 2px;
+  height: 8px;
+  width: 210px;
+  max-width: 100%;
+}
+.ktl-card-foot {
+  display: flex;
+  gap: 8px;
+  font-size: 10px;
+  color: #6b7280;
+  flex-wrap: wrap;
+}
+
+/* ── ScopeView ──────────────────────────────────────────────────────────────── */
+.scope-tree-node {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  padding-right: 4px;
+  min-width: 0;
+}
+.scope-tree-pin {
+  opacity: 0;
+  cursor: pointer;
+  padding: 2px;
+  transition: opacity 0.15s;
+  margin-left: 4px;
+  flex-shrink: 0;
+}
+.scope-tree-node:hover .scope-tree-pin,
+.scope-tree-pin-active {
+  opacity: 1;
+}
+.scope-kernel-row {
+  padding: 6px 8px;
+  border-radius: 4px;
+  cursor: pointer;
+  border: 1px solid #1f2937;
+  margin-bottom: 4px;
+  background: #111827;
+  transition: border-color 0.15s;
+}
+.scope-kernel-row:hover {
+  border-color: #374151;
+}
+.scope-kernel-row-active {
+  border-color: #ef4444 !important;
+  box-shadow: 0 0 6px rgba(239, 68, 68, 0.25);
 }

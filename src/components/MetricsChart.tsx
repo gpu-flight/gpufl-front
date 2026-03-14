@@ -9,19 +9,16 @@ import {
   Legend,
   ResponsiveContainer,
   ReferenceArea,
+  Brush,
 } from 'recharts'
 import { HostMetricSample, DeviceMetricSample } from '@/types'
-import { Checkbox, Space, Divider, Typography } from 'antd'
+import { Checkbox, Space, Divider, Typography, Badge, Tag } from 'antd'
 import { useStore, MetricKey } from '@/store/useStore'
+
+const BRUSH_HEIGHT = 24
 
 function nsToUs(ns: number) {
   return ns / 1_000
-}
-
-function formatTime(us: number) {
-  // Simple relative time in microseconds or milliseconds
-  if (us < 1000) return `${us.toFixed(0)}us`
-  return `${(us / 1000).toFixed(2)}ms`
 }
 
 export interface MetricsChartProps {
@@ -29,11 +26,35 @@ export interface MetricsChartProps {
   deviceData: DeviceMetricSample[]
   globalRange?: { start_ns: number; end_ns: number }
   highlightRange?: { start_ns: number; end_ns: number }
+  isLive?: boolean
 }
 
-export default function MetricsChart({ hostData, deviceData, globalRange, highlightRange }: MetricsChartProps) {
+function fmtDate(ms: number) {
+  return new Date(ms).toLocaleDateString([], { year: 'numeric', month: 'short', day: 'numeric' })
+}
+
+function fmtTime(ms: number) {
+  return new Date(ms).toLocaleTimeString([], { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' })
+}
+
+export default function MetricsChart({ hostData, deviceData, globalRange, highlightRange, isLive }: MetricsChartProps) {
   const metricVisibility = useStore((s) => s.metricVisibility)
   const setMetricVisibility = useStore((s) => s.setMetricVisibility)
+  const metricsZoomRange = useStore((s) => s.metricsZoomRange)
+  const setMetricsZoom = useStore((s) => s.setMetricsZoom)
+
+  // Session date/time header derived from globalRange
+  const sessionHeader = useMemo(() => {
+    if (!globalRange) return null
+    const startMs = globalRange.start_ns / 1_000_000
+    const endMs = globalRange.end_ns / 1_000_000
+    const startDate = fmtDate(startMs)
+    const endDate = fmtDate(endMs)
+    const startTime = fmtTime(startMs)
+    const endTime = fmtTime(endMs)
+    const sameDay = startDate === endDate
+    return { date: startDate, startTime, endTime: sameDay ? endTime : `${endDate} ${endTime}` }
+  }, [globalRange])
 
   const hostChartData = useMemo(() => {
     if (!hostData || !globalRange) return []
@@ -71,7 +92,7 @@ export default function MetricsChart({ hostData, deviceData, globalRange, highli
   const domain = useMemo(() => {
     if (globalRange) {
       const durationUs = nsToUs(globalRange.end_ns - globalRange.start_ns)
-      return [0, Math.max(durationUs, 1)] // Min 1us range
+      return [0, Math.max(durationUs, 1)]
     }
     return ['dataMin', 'dataMax']
   }, [globalRange])
@@ -79,37 +100,51 @@ export default function MetricsChart({ hostData, deviceData, globalRange, highli
   const ticks = useMemo(() => {
     if (!globalRange) return undefined
     const durationUs = nsToUs(globalRange.end_ns - globalRange.start_ns)
-    
-    // Choose a step that results in reasonable number of ticks
-    let step = 100 // 100us
-    if (durationUs > 1000) step = 200 // 200us
-    if (durationUs > 5000) step = 500 // 500us
-    if (durationUs > 10000) step = 1000 // 1ms
-    if (durationUs > 50000) step = 5000 // 5ms
-    if (durationUs > 100000) step = 10000 // 10ms
-    if (durationUs > 500000) step = 50000 // 50ms
+
+    let step = 100
+    if (durationUs > 1_000) step = 200
+    if (durationUs > 5_000) step = 500
+    if (durationUs > 10_000) step = 1_000
+    if (durationUs > 50_000) step = 5_000
+    if (durationUs > 100_000) step = 10_000
+    if (durationUs > 500_000) step = 50_000
+    if (durationUs > 2_000_000) step = 200_000       // 200 ms
+    if (durationUs > 10_000_000) step = 1_000_000    // 1 s
+    if (durationUs > 60_000_000) step = 5_000_000    // 5 s
+    if (durationUs > 300_000_000) step = 30_000_000  // 30 s
+    if (durationUs > 600_000_000) step = 60_000_000  // 1 min
+    if (durationUs > 3_600_000_000) step = 300_000_000 // 5 min
 
     const tickCount = Math.floor(durationUs / step)
     if (tickCount > 0 && tickCount < 200) {
       return Array.from({ length: tickCount + 1 }, (_, i) => i * step)
     }
-    return undefined // Fallback to automatic ticks
+    return undefined
   }, [globalRange])
 
-  const formatRelTime = (us: number) => {
-    if (us < 1000) return `${us.toFixed(0)}us`
-    if (us < 1000000) return `${(us / 1000).toFixed(1)}ms`
-    return `${(us / 1000000).toFixed(3)}s`
+  // Format a relative-us tick as an absolute wall-clock time (HH:MM:SS or HH:MM:SS.mmm)
+  const formatTickTime = (us: number) => {
+    if (!globalRange) return ''
+    const absMs = (globalRange.start_ns / 1_000_000) + (us / 1_000)
+    const d = new Date(absMs)
+    const hh = String(d.getHours()).padStart(2, '0')
+    const mm = String(d.getMinutes()).padStart(2, '0')
+    const ss = String(d.getSeconds()).padStart(2, '0')
+    const durationUs = nsToUs(globalRange.end_ns - globalRange.start_ns)
+    // Show milliseconds only for short durations
+    if (durationUs < 10_000_000) {
+      const ms = String(d.getMilliseconds()).padStart(3, '0')
+      return `${hh}:${mm}:${ss}.${ms}`
+    }
+    return `${hh}:${mm}:${ss}`
   }
 
-  const formatAbsTime = (us: number) => {
+  // Tooltip label: full absolute timestamp
+  const formatTooltipTime = (us: number) => {
     if (!globalRange) return ''
-    const absMs = (globalRange.start_ns + (us * 1000)) / 1_000_000
-    const date = new Date(absMs)
-    const timeStr = date.toLocaleTimeString([], { hour12: false })
-    const msStr = String(date.getMilliseconds()).padStart(3, '0')
-    const usRemainder = Math.floor((absMs % 1) * 1000)
-    return `${timeStr}.${msStr}.${String(usRemainder).padStart(3, '0')}`
+    const absMs = (globalRange.start_ns / 1_000_000) + (us / 1_000)
+    const d = new Date(absMs)
+    return d.toLocaleTimeString([], { hour12: false }) + '.' + String(d.getMilliseconds()).padStart(3, '0')
   }
 
   const highlightArea = useMemo(() => {
@@ -136,6 +171,28 @@ export default function MetricsChart({ hostData, deviceData, globalRange, highli
 
   return (
     <div style={{ width: '100%' }}>
+      {/* Session time range header */}
+      {sessionHeader && (
+        <div style={{
+          display: 'flex', alignItems: 'center', gap: 12,
+          marginBottom: 16, padding: '8px 12px',
+          background: '#111827', borderRadius: 6, border: '1px solid #1f2937',
+        }}>
+          <span style={{ color: '#9ca3af', fontSize: 12 }}>{sessionHeader.date}</span>
+          <span style={{ color: '#e5e7eb', fontFamily: 'monospace', fontSize: 13 }}>
+            {sessionHeader.startTime}
+          </span>
+          <span style={{ color: '#4b5563' }}>→</span>
+          {isLive ? (
+            <Badge status="processing" text={<span style={{ color: '#34d399', fontSize: 13, fontFamily: 'monospace' }}>LIVE</span>} />
+          ) : (
+            <span style={{ color: '#e5e7eb', fontFamily: 'monospace', fontSize: 13 }}>
+              {sessionHeader.endTime}
+            </span>
+          )}
+        </div>
+      )}
+
       <div style={{ marginBottom: 16 }}>
         <Typography.Text strong>Host Metrics: </Typography.Text>
         <Space wrap>
@@ -143,7 +200,7 @@ export default function MetricsChart({ hostData, deviceData, globalRange, highli
           {renderToggle('ramUsedMib', 'RAM Used (MiB)')}
           {renderToggle('ramTotalMib', 'RAM Total (MiB)')}
         </Space>
-        <div style={{ height: 250, marginTop: 8 }}>
+        <div style={{ height: 270, marginTop: 8 }}>
           <ResponsiveContainer width="100%" height="100%">
             <LineChart data={hostChartData} margin={{ top: 10, right: 20, left: 0, bottom: 10 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
@@ -152,18 +209,33 @@ export default function MetricsChart({ hostData, deviceData, globalRange, highli
                 type="number"
                 domain={domain}
                 ticks={ticks}
-                tickFormatter={formatRelTime}
+                tickFormatter={formatTickTime}
                 stroke="#9ca3af"
                 allowDataOverflow
-                minTickGap={30}
+                minTickGap={60}
               />
               <YAxis yAxisId="left" stroke="#9ca3af" />
-              <Tooltip labelFormatter={(v) => formatAbsTime(v as number)} />
+              <Tooltip labelFormatter={(v) => formatTooltipTime(v as number)} />
               <Legend />
               {highlightArea}
               {metricVisibility.cpuPct && <Line yAxisId="left" type="monotone" dataKey="cpuPct" name="CPU %" stroke="#60a5fa" dot={false} isAnimationActive={false} connectNulls />}
               {metricVisibility.ramUsedMib && <Line yAxisId="left" type="monotone" dataKey="ramUsedMib" name="RAM Used (MiB)" stroke="#34d399" dot={false} isAnimationActive={false} connectNulls />}
               {metricVisibility.ramTotalMib && <Line yAxisId="left" type="monotone" dataKey="ramTotalMib" name="RAM Total (MiB)" stroke="#f87171" dot={false} isAnimationActive={false} connectNulls />}
+              <Brush
+                dataKey="ts_rel_us"
+                height={BRUSH_HEIGHT}
+                stroke="#374151"
+                fill="#111827"
+                travellerWidth={6}
+                startIndex={metricsZoomRange ? Math.min(metricsZoomRange[0], hostChartData.length - 1) : undefined}
+                endIndex={metricsZoomRange ? Math.min(metricsZoomRange[1], hostChartData.length - 1) : undefined}
+                tickFormatter={formatTickTime}
+                onChange={(range: any) => {
+                  if (range?.startIndex != null && range?.endIndex != null) {
+                    setMetricsZoom([range.startIndex, range.endIndex])
+                  }
+                }}
+              />
             </LineChart>
           </ResponsiveContainer>
         </div>
@@ -182,7 +254,7 @@ export default function MetricsChart({ hostData, deviceData, globalRange, highli
           {renderToggle('powerW', 'Power (W)')}
           {renderToggle('fanSpeedPct', 'Fan %')}
         </Space>
-        <div style={{ height: 300, marginTop: 8 }}>
+        <div style={{ height: 320, marginTop: 8 }}>
           <ResponsiveContainer width="100%" height="100%">
             <LineChart data={deviceChartData} margin={{ top: 10, right: 20, left: 0, bottom: 10 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
@@ -191,13 +263,13 @@ export default function MetricsChart({ hostData, deviceData, globalRange, highli
                 type="number"
                 domain={domain}
                 ticks={ticks}
-                tickFormatter={formatRelTime}
+                tickFormatter={formatTickTime}
                 stroke="#9ca3af"
                 allowDataOverflow
-                minTickGap={30}
+                minTickGap={60}
               />
               <YAxis yAxisId="left" stroke="#9ca3af" />
-              <Tooltip labelFormatter={(v) => formatAbsTime(v as number)} />
+              <Tooltip labelFormatter={(v) => formatTooltipTime(v as number)} />
               <Legend />
               {highlightArea}
               {deviceIds.flatMap((d, idx) => {
@@ -227,6 +299,21 @@ export default function MetricsChart({ hostData, deviceData, globalRange, highli
                   ),
                 ].filter(Boolean);
               })}
+              <Brush
+                dataKey="ts_rel_us"
+                height={BRUSH_HEIGHT}
+                stroke="#374151"
+                fill="#111827"
+                travellerWidth={6}
+                startIndex={metricsZoomRange ? Math.min(metricsZoomRange[0], deviceChartData.length - 1) : undefined}
+                endIndex={metricsZoomRange ? Math.min(metricsZoomRange[1], deviceChartData.length - 1) : undefined}
+                tickFormatter={formatTickTime}
+                onChange={(range: any) => {
+                  if (range?.startIndex != null && range?.endIndex != null) {
+                    setMetricsZoom([range.startIndex, range.endIndex])
+                  }
+                }}
+              />
             </LineChart>
           </ResponsiveContainer>
         </div>
