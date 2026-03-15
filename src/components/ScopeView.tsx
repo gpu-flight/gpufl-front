@@ -89,34 +89,26 @@ interface SassRow {
   threadInstExecuted: number
   avgActiveThreads: number
   divergencePct: number
+  occurrenceCount: number
 }
 
 function buildSassRows(samples: ProfileSample[]): SassRow[] {
-  const pcData = new Map<string, { instExecuted: number; threadInstExecuted: number; functionName: string; sourceFile: string; sourceLine: number | null }>()
-  for (const s of samples) {
-    const pcKey = `${s.functionName ?? ''}::${s.pcOffset ?? '0x0'}`
-    if (!pcData.has(pcKey)) {
-      pcData.set(pcKey, { instExecuted: 0, threadInstExecuted: 0, functionName: s.functionName ?? '', sourceFile: s.sourceFile ?? '', sourceLine: s.sourceLine ?? null })
-    }
-    const entry = pcData.get(pcKey)!
-    if (s.metricName === 'smsp__sass_inst_executed') entry.instExecuted += s.metricValue ?? 0
-    else if (s.metricName === 'smsp__sass_thread_inst_executed') entry.threadInstExecuted += s.metricValue ?? 0
-  }
   const rows: SassRow[] = []
-  for (const [pcKey, vals] of pcData.entries()) {
-    if (vals.instExecuted === 0) continue
-    const avg = Math.min(32, vals.threadInstExecuted / vals.instExecuted)
-    const pcOffset = pcKey.split('::')[1]
+  for (const s of samples) {
+    if (s.instExecuted === 0) continue
+    const avg = Math.min(32, s.threadInstExecuted / s.instExecuted)
+    const pcKey = `${s.functionName ?? ''}::${s.pcOffset ?? '0x0'}`
     rows.push({
       key: pcKey,
-      pcOffset,
-      functionName: vals.functionName,
-      sourceFile: vals.sourceFile,
-      sourceLine: vals.sourceLine,
-      instExecuted: vals.instExecuted,
-      threadInstExecuted: vals.threadInstExecuted,
+      pcOffset: s.pcOffset ?? '0x0',
+      functionName: s.functionName ?? '',
+      sourceFile: s.sourceFile ?? '',
+      sourceLine: s.sourceLine ?? null,
+      instExecuted: s.instExecuted,
+      threadInstExecuted: s.threadInstExecuted,
       avgActiveThreads: avg,
       divergencePct: ((32 - avg) / 32) * 100,
+      occurrenceCount: s.occurrenceCount,
     })
   }
   return rows.sort((a, b) => a.avgActiveThreads - b.avgActiveThreads)
@@ -174,6 +166,12 @@ const SASS_COLUMNS: ColumnsType<SassRow> = [
     width: 110,
     align: 'right',
     render: (v: number) => `${v.toFixed(1)}%`,
+  },
+  {
+    title: 'Runs',
+    dataIndex: 'occurrenceCount',
+    width: 70,
+    align: 'right',
   },
 ]
 
@@ -317,6 +315,7 @@ function ScopeDetail({ scopeEvent, kernels, sassMetrics, onSelectEvent, activeEv
         const weightedAvg = totalInst > 0
           ? rows.reduce((s, r) => s + r.avgActiveThreads * r.instExecuted, 0) / totalInst
           : 0
+        const nRuns = rows.length > 0 ? Math.max(...rows.map(r => r.occurrenceCount)) : 0
         return (
           <>
             <Divider plain style={{ margin: '16px 0 8px', fontSize: 12, color: '#6b7280' }}>
@@ -324,7 +323,7 @@ function ScopeDetail({ scopeEvent, kernels, sassMetrics, onSelectEvent, activeEv
               <span style={{ color: divergenceColor(weightedAvg), fontWeight: 600 }}>
                 {weightedAvg.toFixed(2)}
               </span>
-              {' '}threads/warp ({rows.length} instructions)
+              {' '}threads/warp · {nRuns} run{nRuns !== 1 ? 's' : ''} ({rows.length} instructions)
             </Divider>
             <Table
               size="small"
@@ -382,13 +381,13 @@ export default function ScopeView({ events, onSelectEvent }: ScopeViewProps) {
     return map
   }, [scopeEvents])
 
-  const sassByScopeId = useMemo(() => {
+  const sassByScopeName = useMemo(() => {
     const map = new Map<string, ProfileSample[]>()
     for (const s of profileSamples) {
-      if (!s.scopeId) continue
-      const arr = map.get(s.scopeId) ?? []
+      if (!s.scopeName) continue
+      const arr = map.get(s.scopeName) ?? []
       arr.push(s)
-      map.set(s.scopeId, arr)
+      map.set(s.scopeName, arr)
     }
     return map
   }, [profileSamples])
@@ -500,7 +499,7 @@ export default function ScopeView({ events, onSelectEvent }: ScopeViewProps) {
                 <ScopeDetail
                   scopeEvent={scope}
                   kernels={kernelEvents}
-                  sassMetrics={sassByScopeId.get(scope.id) ?? []}
+                  sassMetrics={sassByScopeName.get(scope.name) ?? []}
                   onSelectEvent={onSelectEvent}
                   activeEventId={activeEventId}
                 />
@@ -511,7 +510,7 @@ export default function ScopeView({ events, onSelectEvent }: ScopeViewProps) {
           <ScopeDetail
             scopeEvent={selectedScope}
             kernels={kernelEvents}
-            sassMetrics={sassByScopeId.get(selectedScope.id) ?? []}
+            sassMetrics={sassByScopeName.get(selectedScope.name) ?? []}
             onSelectEvent={onSelectEvent}
             activeEventId={activeEventId}
           />

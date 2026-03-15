@@ -120,21 +120,16 @@ export interface HostSummary {
 export interface ProfileSample {
   id: string;
   sessionId: string;
-  scopeId?: string;
-  tsNs: number;
-  deviceId: number;
-  corrId: number;
+  scopeName?: string;
   sampleKind: 'sass_metric' | 'pc_sampling';
-  // sass_metric fields
-  metricName?: string;
-  metricValue?: number;
-  pcOffset?: string;
-  // shared
   functionName?: string;
+  pcOffset?: string;
   sourceFile?: string;
   sourceLine?: number;
-  // pc_sampling fields
-  sampleCount?: number;
+  instExecuted: number;
+  threadInstExecuted: number;
   stallReason?: number;
   reasonName?: string;
+  sampleCount: number;
+  occurrenceCount: number;
 }
