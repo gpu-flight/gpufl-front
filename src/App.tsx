@@ -31,31 +31,31 @@ export default function App() {
         },
       }}
     >
-      <Layout style={{ minHeight: '100vh' }}>
-        <Header style={{ background: '#0b0d10', borderBottom: '1px solid #1f2937', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 16px' }}>
-          <Link to="/" style={{ color: 'inherit', textDecoration: 'none', display: 'flex', alignItems: 'center' }}>
-            <div style={{ fontWeight: 700, fontSize: '18px' }}>GPUFL Portal</div>
+      <Layout className="app-layout">
+        <Header className="app-header">
+          <Link to="/" className="app-logo-link">
+            <div className="app-logo-title">GPUFL Portal</div>
           </Link>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <div className="app-header-actions">
             <Link to="/">
-              <Button type="text" icon={<HomeOutlined />} style={{ color: '#9ca3af' }}>
+              <Button type="text" icon={<HomeOutlined />} className="app-header-btn">
                 Home
               </Button>
             </Link>
             <Link to="/api-keys">
-              <Button type="text" icon={<KeyOutlined />} style={{ color: '#9ca3af' }}>
+              <Button type="text" icon={<KeyOutlined />} className="app-header-btn">
                 API Keys
               </Button>
             </Link>
             {username && (
-              <span style={{ color: '#9ca3af', fontSize: 13 }}>{username}</span>
+              <span className="app-header-username">{username}</span>
             )}
-            <Button type="text" icon={<LogoutOutlined />} style={{ color: '#9ca3af' }} onClick={handleLogout}>
+            <Button type="text" icon={<LogoutOutlined />} className="app-header-btn" onClick={handleLogout}>
               Logout
             </Button>
           </div>
         </Header>
-        <Content style={{ padding: 16 }}>
+        <Content className="app-content">
           <Outlet />
         </Content>
       </Layout>

@@ -26,8 +26,8 @@ function GpuCard({
       <div className="gpu-card-id">GPU {gpu.deviceId}</div>
       <div className="gpu-card-name" title={gpu.name}>{gpu.name}</div>
       <div className="gpu-card-meta">
-        <Tag style={{ fontSize: 10 }}>SM {gpu.computeMajor}.{gpu.computeMinor}</Tag>
-        <Tag style={{ fontSize: 10 }}>{gpu.multiProcessorCount} MPs</Tag>
+        <Tag className="session-gpu-tag">SM {gpu.computeMajor}.{gpu.computeMinor}</Tag>
+        <Tag className="session-gpu-tag">{gpu.multiProcessorCount} MPs</Tag>
       </div>
     </div>
   )
@@ -45,7 +45,7 @@ const sessionColumns: ColumnsType<SessionSummary> = [
     dataIndex: 'sessionId',
     key: 'sessionId',
     render: (v: string) => (
-      <Text type="secondary" style={{ fontFamily: 'monospace', fontSize: 11 }}>
+      <Text type="secondary" className="session-id-text">
         {v}
       </Text>
     ),
@@ -66,7 +66,7 @@ const sessionColumns: ColumnsType<SessionSummary> = [
     title: 'GPUs',
     key: 'gpus',
     render: (_: unknown, record: SessionSummary) => (
-      <Text type="secondary" style={{ fontSize: 11 }}>
+      <Text type="secondary" className="session-gpus-text">
         {record.gpus.map(g => g.name).filter((v, i, a) => a.indexOf(v) === i).join(', ') || '—'}
       </Text>
     ),
@@ -109,7 +109,7 @@ export default function SessionList() {
 
   if (loading) {
     return (
-      <div style={{ padding: 64, textAlign: 'center' }}>
+      <div className="session-list-loading">
         <Spin size="large" />
       </div>
     )
@@ -117,19 +117,19 @@ export default function SessionList() {
 
   if (hosts.length === 0) {
     return (
-      <div style={{ padding: 48, textAlign: 'center' }}>
+      <div className="session-list-empty">
         <Empty description="No hosts found. Make sure the agent is running and has forwarded at least one init event." />
       </div>
     )
   }
 
   return (
-    <div style={{ padding: '24px 32px' }}>
-      <Typography.Title level={4} style={{ marginBottom: 24 }}>
+    <div className="session-list-page">
+      <Typography.Title level={4} className="session-list-title">
         Host &amp; GPU Selection
       </Typography.Title>
 
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+      <div className="session-list-hosts">
         {hosts.map((host) => {
           const isExpanded = expandedHost === host.hostname
 
@@ -163,14 +163,14 @@ export default function SessionList() {
                   setSelectedGpuKey(null)
                 }}
               >
-                <DesktopOutlined style={{ fontSize: 16, color: '#60a5fa', marginRight: 10 }} />
-                <span style={{ fontWeight: 600, fontSize: 15 }}>{host.hostname}</span>
+                <DesktopOutlined className="host-icon" />
+                <span className="host-name">{host.hostname}</span>
                 {host.ipAddr && (
-                  <Text type="secondary" style={{ fontSize: 12, marginLeft: 10 }}>
+                  <Text type="secondary" className="host-ip">
                     {host.ipAddr}
                   </Text>
                 )}
-                <Tag color="blue" style={{ marginLeft: 12 }}>
+                <Tag color="blue" className="host-session-count">
                   {host.sessions.length} session{host.sessions.length !== 1 ? 's' : ''}
                 </Tag>
                 <Tag color="geekblue">
@@ -200,7 +200,7 @@ export default function SessionList() {
 
               {/* Sessions table */}
               {isExpanded && (
-                <div style={{ marginTop: 16 }}>
+                <div className="host-sessions-wrap">
                   <Table<SessionSummary>
                     rowKey="sessionId"
                     columns={[...sessionColumns, viewColumn]}

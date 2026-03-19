@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { Session, TraceEvent, HostMetricSample, DeviceMetricSample, InitResponse, SystemMetricsResponse, HostSummary, ProfileSample } from '@/types';
+import { Session, TraceEvent, HostMetricSample, DeviceMetricSample, InitResponse, SystemMetricsResponse, HostSummary, ProfileSample, InsightDto } from '@/types';
 import { apiFetch } from '@/api';
 
 export type HostMetricKey = 'cpuPct' | 'ramUsedMib' | 'ramTotalMib';
@@ -13,13 +13,14 @@ interface AppState {
   hostMetrics: HostMetricSample[];
   deviceMetrics: DeviceMetricSample[];
   profileSamples: ProfileSample[];
+  insights: InsightDto[] | null;
   metricsRange?: { start_ns: number; end_ns: number };
   globalRange?: { start_ns: number; end_ns: number };
   currentSessionId?: string;
   activeEventId?: string;
   highlightRange?: { start_ns: number; end_ns: number };
   metricVisibility: Record<MetricKey, boolean>;
-  activeTab: 'kernels' | 'scopes' | 'system';
+  activeTab: 'kernels' | 'scopes' | 'system' | 'insights';
   comparedScopeIds: string[];
   metricsZoomRange?: [number, number];
   activeScopeKey?: string;
@@ -33,11 +34,12 @@ interface AppState {
   fetchInit: () => Promise<void>;
   fetchSystemMetrics: (sessionId: string) => Promise<void>;
   fetchProfileSamples: (sessionId: string) => Promise<void>;
+  fetchInsights: (sessionId: string) => Promise<void>;
   selectSession: (id: string) => void;
   setActiveEvent: (id?: string) => void;
   setMetricVisibility: (key: MetricKey, visible: boolean) => void;
   updateGlobalRange: () => void;
-  setActiveTab: (tab: 'kernels' | 'scopes' | 'system') => void;
+  setActiveTab: (tab: 'kernels' | 'scopes' | 'system' | 'insights') => void;
   toggleComparedScope: (id: string) => void;
   setMetricsZoom: (range?: [number, number]) => void;
   setActiveScopeKey: (key?: string) => void;
@@ -51,6 +53,7 @@ export const useStore = create<AppState>((set, get) => ({
   hostMetrics: [],
   deviceMetrics: [],
   profileSamples: [],
+  insights: null,
   metricsRange: undefined,
   globalRange: undefined,
   metricVisibility: {
@@ -65,7 +68,7 @@ export const useStore = create<AppState>((set, get) => ({
     powerW: true,
     fanSpeedPct: false,
   },
-  activeTab: 'kernels' as 'kernels' | 'scopes' | 'system',
+  activeTab: 'kernels' as 'kernels' | 'scopes' | 'system' | 'insights',
   comparedScopeIds: [],
   metricsZoomRange: undefined,
   activeScopeKey: undefined,
@@ -81,7 +84,11 @@ export const useStore = create<AppState>((set, get) => ({
   },
   fetchInit: async () => {
     try {
-      const res = await apiFetch('/api/v1/events/init');
+      const dateTo = new Date();
+      const dateFrom = new Date(dateTo.getTime() - 30 * 24 * 60 * 60 * 1000); // 30 days back
+      const res = await apiFetch(
+        `/api/v1/events/init?dateFrom=${dateFrom.toISOString()}&dateTo=${dateTo.toISOString()}`
+      );
       const data: InitResponse = await res.json();
       
       const sessions: Session[] = data.map(s => ({
@@ -137,6 +144,16 @@ export const useStore = create<AppState>((set, get) => ({
             stream_id: k.streamId ?? k.deviceId ?? 0,
             grid: k.grid,
             block: k.block,
+            numRegs: k.numRegs,
+            occupancy: k.occupancy != null ? Number(k.occupancy) : undefined,
+            regOccupancy: k.regOccupancy != null ? Number(k.regOccupancy) : undefined,
+            smemOccupancy: k.smemOccupancy != null ? Number(k.smemOccupancy) : undefined,
+            warpOccupancy: k.warpOccupancy != null ? Number(k.warpOccupancy) : undefined,
+            blockOccupancy: k.blockOccupancy != null ? Number(k.blockOccupancy) : undefined,
+            limitingResource: k.limitingResource,
+            localMemTotalBytes: k.localMemTotalBytes,
+            dynSharedBytes: k.dynSharedBytes,
+            staticSharedBytes: k.staticSharedBytes,
           };
         });
 
@@ -264,6 +281,18 @@ export const useStore = create<AppState>((set, get) => ({
       set({ profileSamples: data });
     } catch (err) {
       console.error('Failed to fetch profile samples', err);
+    }
+  },
+  fetchInsights: async (sessionId: string) => {
+    try {
+      const res = await apiFetch(`/api/v1/insights/${sessionId}`);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json();
+      const items: InsightDto[] = Array.isArray(data) ? data : (data.insights ?? []);
+      set({ insights: items });
+    } catch (err) {
+      console.error('Failed to fetch insights', err);
+      set({ insights: [] });
     }
   },
   selectSession: (id: string) => {

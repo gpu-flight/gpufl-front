@@ -26,31 +26,31 @@ export default function RegisterPage() {
 
   return (
     <ConfigProvider theme={{ algorithm: theme.darkAlgorithm, token: { colorBgBase: '#0b0d10', colorTextBase: '#e5e7eb' } }}>
-    <div style={{ minHeight: '100vh', background: '#0b0d10', display: 'flex', alignItems: 'flex-start', justifyContent: 'center' }}>
-    <div style={{ maxWidth: 400, width: '100%', margin: '80px 16px 0' }}>
-      <Title level={3} style={{ marginBottom: 24 }}>Create Account</Title>
-      {error && <Alert type="error" message={error} style={{ marginBottom: 16 }} />}
-      <Form layout="vertical" onFinish={onFinish}>
-        <Form.Item label="Email" name="email" rules={[{ required: true, type: 'email' }]}>
-          <Input autoComplete="email" />
-        </Form.Item>
-        <Form.Item label="Username" name="username" rules={[{ required: true, min: 3 }]}>
-          <Input autoComplete="username" />
-        </Form.Item>
-        <Form.Item label="Password" name="password" rules={[{ required: true, min: 8 }]}>
-          <Input.Password autoComplete="new-password" />
-        </Form.Item>
-        <Form.Item>
-          <Button type="primary" htmlType="submit" loading={loading} block>
-            Register
-          </Button>
-        </Form.Item>
-      </Form>
-      <div style={{ textAlign: 'center' }}>
-        Already have an account? <Link to="/login">Sign in</Link>
+      <div className="auth-page">
+        <div className="auth-card">
+          <Title level={3} className="auth-title">Create Account</Title>
+          {error && <Alert type="error" message={error} className="auth-error" />}
+          <Form layout="vertical" onFinish={onFinish}>
+            <Form.Item label="Email" name="email" rules={[{ required: true, type: 'email' }]}>
+              <Input autoComplete="email" />
+            </Form.Item>
+            <Form.Item label="Username" name="username" rules={[{ required: true, min: 3 }]}>
+              <Input autoComplete="username" />
+            </Form.Item>
+            <Form.Item label="Password" name="password" rules={[{ required: true, min: 8 }]}>
+              <Input.Password autoComplete="new-password" />
+            </Form.Item>
+            <Form.Item>
+              <Button type="primary" htmlType="submit" loading={loading} block>
+                Register
+              </Button>
+            </Form.Item>
+          </Form>
+          <div className="auth-footer">
+            Already have an account? <Link to="/login">Sign in</Link>
+          </div>
+        </div>
       </div>
-    </div>
-    </div>
     </ConfigProvider>
   )
 }

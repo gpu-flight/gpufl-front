@@ -32,7 +32,7 @@ const router = createBrowserRouter([
     ),
     errorElement: (
       <ErrorBoundary>
-        <div style={{ height: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <div className="fullpage-center">
            <h1>404 - Not Found</h1>
         </div>
       </ErrorBoundary>

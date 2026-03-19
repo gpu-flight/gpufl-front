@@ -6,6 +6,7 @@ import { TraceEvent, ProfileSample } from '@/types'
 import { useStore } from '@/store/useStore'
 import { formatWallClock, fmtRelNs } from '@/utils/timeFormat'
 import MetricsChart from '@/components/MetricsChart'
+import StallReasonChart from '@/components/StallReasonChart'
 
 // Padding on each side of the scope when rendering the system chart
 const CHART_PAD_NS = 2_000_000_000 // 2 seconds
@@ -179,11 +180,12 @@ interface ScopeDetailProps {
   scopeEvent: TraceEvent
   kernels: TraceEvent[]
   sassMetrics: ProfileSample[]
+  allScopeSamples: ProfileSample[]
   onSelectEvent: (id: string) => void
   activeEventId?: string
 }
 
-function ScopeDetail({ scopeEvent, kernels, sassMetrics, onSelectEvent, activeEventId }: ScopeDetailProps) {
+function ScopeDetail({ scopeEvent, kernels, sassMetrics, allScopeSamples, onSelectEvent, activeEventId }: ScopeDetailProps) {
   const globalRange = useStore((s) => s.globalRange)
   const sessionStartNs = globalRange?.start_ns
   const hostMetrics = useStore((s) => s.hostMetrics)
@@ -342,6 +344,15 @@ function ScopeDetail({ scopeEvent, kernels, sassMetrics, onSelectEvent, activeEv
           </>
         )
       })()}
+
+      {allScopeSamples.some((s) => s.sampleKind === 'pc_sampling') && (
+        <>
+          <Divider plain style={{ margin: '16px 0 8px', fontSize: 12, color: '#6b7280' }}>
+            Stall Reasons (PC Sampling)
+          </Divider>
+          <StallReasonChart samples={allScopeSamples} />
+        </>
+      )}
     </div>
   )
 }
@@ -500,6 +511,7 @@ export default function ScopeView({ events, onSelectEvent }: ScopeViewProps) {
                   scopeEvent={scope}
                   kernels={kernelEvents}
                   sassMetrics={sassByScopeName.get(scope.name) ?? []}
+                  allScopeSamples={sassByScopeName.get(scope.name) ?? []}
                   onSelectEvent={onSelectEvent}
                   activeEventId={activeEventId}
                 />
@@ -511,6 +523,7 @@ export default function ScopeView({ events, onSelectEvent }: ScopeViewProps) {
             scopeEvent={selectedScope}
             kernels={kernelEvents}
             sassMetrics={sassByScopeName.get(selectedScope.name) ?? []}
+            allScopeSamples={sassByScopeName.get(selectedScope.name) ?? []}
             onSelectEvent={onSelectEvent}
             activeEventId={activeEventId}
           />
