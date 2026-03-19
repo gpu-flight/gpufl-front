@@ -45,6 +45,16 @@ export interface TraceEvent {
   stream_id?: number;
   grid?: string;
   block?: string;
+  numRegs?: number;
+  occupancy?: number;
+  regOccupancy?: number;
+  smemOccupancy?: number;
+  warpOccupancy?: number;
+  blockOccupancy?: number;
+  limitingResource?: string;
+  localMemTotalBytes?: number;
+  dynSharedBytes?: number;
+  staticSharedBytes?: number;
 
   // For Scopes only
   depth?: number;
@@ -132,4 +142,19 @@ export interface ProfileSample {
   reasonName?: string;
   sampleCount: number;
   occurrenceCount: number;
+}
+
+export interface InsightDto {
+  severity: 'HIGH' | 'MEDIUM' | 'LOW';
+  category: string;
+  kernelName?: string;
+  functionName?: string;
+  title: string;
+  message: string;
+  metric: string;
+}
+
+export interface SessionInsightsDto {
+  sessionId: string;
+  insights: InsightDto[];
 }

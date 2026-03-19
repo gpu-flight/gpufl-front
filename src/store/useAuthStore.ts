@@ -9,7 +9,7 @@ interface AuthState {
   register: (email: string, username: string, password: string) => Promise<void>
 }
 
-const BASE_URL = 'http://localhost:8080'
+const BASE_URL = 'http://192.168.254.31:8080'
 
 export const useAuthStore = create<AuthState>((set) => ({
   token: localStorage.getItem('auth_token'),

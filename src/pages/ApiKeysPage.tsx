@@ -110,7 +110,7 @@ export default function ApiKeysPage() {
       dataIndex: 'keyPrefix',
       key: 'keyPrefix',
       render: (v: string) => (
-        <Tag style={{ fontFamily: 'monospace' }}>{v}…</Tag>
+        <Tag className="api-key-prefix">{v}…</Tag>
       ),
     },
     {
@@ -147,10 +147,10 @@ export default function ApiKeysPage() {
   ]
 
   return (
-    <div style={{ padding: '24px 32px', maxWidth: 900 }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
-        <Title level={4} style={{ margin: 0 }}>
-          <KeyOutlined style={{ marginRight: 8 }} />
+    <div className="api-keys-page">
+      <div className="api-keys-header">
+        <Title level={4} className="api-keys-title">
+          <KeyOutlined className="api-keys-title-icon" />
           API Keys
         </Title>
         <Button type="primary" icon={<PlusOutlined />} onClick={() => { setCreateOpen(true); setCreateError(null) }}>
@@ -176,7 +176,7 @@ export default function ApiKeysPage() {
         footer={null}
         destroyOnClose
       >
-        {createError && <Alert type="error" message={createError} style={{ marginBottom: 16 }} />}
+        {createError && <Alert type="error" message={createError} className="api-keys-alert" />}
         <Form form={form} layout="vertical" onFinish={handleCreate}>
           <Form.Item
             label="Key name"
@@ -186,7 +186,7 @@ export default function ApiKeysPage() {
           >
             <Input placeholder="my-workstation-agent" />
           </Form.Item>
-          <Form.Item style={{ marginBottom: 0, textAlign: 'right' }}>
+          <Form.Item className="api-keys-form-actions">
             <Space>
               <Button onClick={() => { setCreateOpen(false); form.resetFields() }}>Cancel</Button>
               <Button type="primary" htmlType="submit" loading={creating}>Generate</Button>
@@ -211,17 +211,17 @@ export default function ApiKeysPage() {
         <Alert
           type="warning"
           message="This key will not be shown again. Copy it now and store it securely."
-          style={{ marginBottom: 16 }}
+          className="api-keys-alert"
         />
         {newKey && (
           <>
             <Text type="secondary">Key name: </Text>
             <Text strong>{newKey.name}</Text>
-            <div style={{ marginTop: 12, display: 'flex', gap: 8, alignItems: 'center' }}>
+            <div className="api-keys-key-row">
               <Paragraph
                 code
                 copyable={false}
-                style={{ margin: 0, flex: 1, padding: '8px 12px', background: '#111827', borderRadius: 6, wordBreak: 'break-all' }}
+                className="api-keys-key-text"
               >
                 {newKey.rawKey}
               </Paragraph>
@@ -233,11 +233,11 @@ export default function ApiKeysPage() {
                 {copied ? 'Copied!' : 'Copy'}
               </Button>
             </div>
-            <div style={{ marginTop: 16 }}>
+            <div className="api-keys-config-block">
               <Text type="secondary">Place this in your agent config:</Text>
               <Paragraph
                 code
-                style={{ marginTop: 8, fontSize: 12 }}
+                className="api-keys-config-code"
               >
                 {`"publisher": {\n  "authToken": "${newKey.rawKey}"\n}`}
               </Paragraph>

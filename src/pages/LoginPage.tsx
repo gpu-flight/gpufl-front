@@ -26,28 +26,28 @@ export default function LoginPage() {
 
   return (
     <ConfigProvider theme={{ algorithm: theme.darkAlgorithm, token: { colorBgBase: '#0b0d10', colorTextBase: '#e5e7eb' } }}>
-    <div style={{ minHeight: '100vh', background: '#0b0d10', display: 'flex', alignItems: 'flex-start', justifyContent: 'center' }}>
-    <div style={{ maxWidth: 400, width: '100%', margin: '80px 16px 0' }}>
-      <Title level={3} style={{ marginBottom: 24 }}>Sign In</Title>
-      {error && <Alert type="error" message={error} style={{ marginBottom: 16 }} />}
-      <Form layout="vertical" onFinish={onFinish}>
-        <Form.Item label="Email or Username" name="emailOrUsername" rules={[{ required: true }]}>
-          <Input autoComplete="username" />
-        </Form.Item>
-        <Form.Item label="Password" name="password" rules={[{ required: true }]}>
-          <Input.Password autoComplete="current-password" />
-        </Form.Item>
-        <Form.Item>
-          <Button type="primary" htmlType="submit" loading={loading} block>
-            Sign In
-          </Button>
-        </Form.Item>
-      </Form>
-      <div style={{ textAlign: 'center' }}>
-        No account? <Link to="/register">Register</Link>
+      <div className="auth-page">
+        <div className="auth-card">
+          <Title level={3} className="auth-title">Sign In</Title>
+          {error && <Alert type="error" message={error} className="auth-error" />}
+          <Form layout="vertical" onFinish={onFinish}>
+            <Form.Item label="Email or Username" name="emailOrUsername" rules={[{ required: true }]}>
+              <Input autoComplete="username" />
+            </Form.Item>
+            <Form.Item label="Password" name="password" rules={[{ required: true }]}>
+              <Input.Password autoComplete="current-password" />
+            </Form.Item>
+            <Form.Item>
+              <Button type="primary" htmlType="submit" loading={loading} block>
+                Sign In
+              </Button>
+            </Form.Item>
+          </Form>
+          <div className="auth-footer">
+            No account? <Link to="/register">Register</Link>
+          </div>
+        </div>
       </div>
-    </div>
-    </div>
     </ConfigProvider>
   )
 }

@@ -173,6 +173,74 @@ export default function Inspector() {
                 )}
               </Descriptions>
               
+              {e.type === 'kernel' && (
+                e.occupancy != null ||
+                e.regOccupancy != null ||
+                e.smemOccupancy != null ||
+                e.warpOccupancy != null ||
+                e.blockOccupancy != null ||
+                e.limitingResource != null ||
+                e.numRegs != null ||
+                e.localMemTotalBytes != null ||
+                e.dynSharedBytes != null ||
+                e.staticSharedBytes != null
+              ) && (
+                <div style={{ marginTop: 12 }}>
+                  <Divider plain>CUDA Metrics</Divider>
+                  <Descriptions size="small" column={1} bordered>
+                    {e.occupancy != null && (
+                      <Descriptions.Item label="Occupancy">
+                        {(e.occupancy * 100).toFixed(1)}%
+                      </Descriptions.Item>
+                    )}
+                    <Descriptions.Item label="Limiting Resource">
+                      {e.limitingResource ?? '—'}
+                    </Descriptions.Item>
+                    {e.regOccupancy != null && (
+                      <Descriptions.Item label="Reg Occupancy">
+                        {(e.regOccupancy * 100).toFixed(1)}%
+                      </Descriptions.Item>
+                    )}
+                    {e.smemOccupancy != null && (
+                      <Descriptions.Item label="SMEM Occupancy">
+                        {(e.smemOccupancy * 100).toFixed(1)}%
+                      </Descriptions.Item>
+                    )}
+                    {e.warpOccupancy != null && (
+                      <Descriptions.Item label="Warp Occupancy">
+                        {(e.warpOccupancy * 100).toFixed(1)}%
+                      </Descriptions.Item>
+                    )}
+                    {e.blockOccupancy != null && (
+                      <Descriptions.Item label="Block Occupancy">
+                        {(e.blockOccupancy * 100).toFixed(1)}%
+                      </Descriptions.Item>
+                    )}
+                    {e.numRegs != null && (
+                      <Descriptions.Item label="Registers / Thread">
+                        {e.numRegs}
+                      </Descriptions.Item>
+                    )}
+                    {e.localMemTotalBytes != null && (
+                      <Descriptions.Item label="Local Mem (spill)">
+                        <span style={{ color: e.localMemTotalBytes > 0 ? '#ef4444' : undefined }}>
+                          {e.localMemTotalBytes === 0
+                            ? '0 B'
+                            : e.localMemTotalBytes < 1024
+                            ? `${e.localMemTotalBytes} B`
+                            : `${(e.localMemTotalBytes / 1024).toFixed(1)} KB`}
+                        </span>
+                      </Descriptions.Item>
+                    )}
+                    {(e.dynSharedBytes != null || e.staticSharedBytes != null) && (
+                      <Descriptions.Item label="Shared Mem (dyn/static)">
+                        {e.dynSharedBytes ?? 0} / {e.staticSharedBytes ?? 0} B
+                      </Descriptions.Item>
+                    )}
+                  </Descriptions>
+                </div>
+              )}
+
               {stack.length > 0 && (
                 <div style={{ marginTop: 16 }}>
                   <Divider plain>Stack Trace</Divider>

@@ -7,6 +7,7 @@ import MetricsChart from '@/components/MetricsChart'
 import KernelTimeline from '@/components/KernelTimeline'
 import ScopeView from '@/components/ScopeView'
 import Inspector from '@/components/Inspector'
+import InsightsPanel from '@/components/InsightsPanel'
 
 export default function Dashboard() {
   const { sessionId } = useParams()
@@ -25,6 +26,8 @@ export default function Dashboard() {
   const setActiveTab = useStore((s) => s.setActiveTab)
   const profileSamples = useStore((s) => s.profileSamples)
   const fetchProfileSamples = useStore((s) => s.fetchProfileSamples)
+  const insights = useStore((s) => s.insights)
+  const fetchInsights = useStore((s) => s.fetchInsights)
 
   React.useEffect(() => {
     if (sessionId) {
@@ -38,6 +41,12 @@ export default function Dashboard() {
       fetchProfileSamples(sessionId)
     }
   }, [activeTab, sessionId, profileSamples.length, fetchProfileSamples])
+
+  React.useEffect(() => {
+    if (activeTab === 'insights' && sessionId && insights === null) {
+      fetchInsights(sessionId)
+    }
+  }, [activeTab, sessionId, insights, fetchInsights])
 
   const session = useMemo(
     () => sessions.find((s) => s.sessionId === sessionId),
@@ -92,7 +101,7 @@ export default function Dashboard() {
       <div style={{ flex: 1, overflow: 'hidden' }}>
         <Tabs
           activeKey={activeTab}
-          onChange={(key) => setActiveTab(key as 'kernels' | 'scopes' | 'system')}
+          onChange={(key) => setActiveTab(key as 'kernels' | 'scopes' | 'system' | 'insights')}
           className="dashboard-tabs"
           items={[
             {
@@ -167,6 +176,23 @@ export default function Dashboard() {
                     highlightRange={highlightRange}
                     isLive={!session?.endTime}
                   />
+                </div>
+              ),
+            },
+            {
+              key: 'insights',
+              label: 'Insights',
+              children: (
+                <div
+                  style={{
+                    height: '100%',
+                    overflowY: 'auto',
+                    background: '#0f1318',
+                    borderRadius: 6,
+                    border: '1px solid #1f2937',
+                  }}
+                >
+                  <InsightsPanel insights={insights} />
                 </div>
               ),
             },

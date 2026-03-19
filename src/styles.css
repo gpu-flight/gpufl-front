@@ -199,3 +199,171 @@
   border-color: #ef4444 !important;
   box-shadow: 0 0 6px rgba(239, 68, 68, 0.25);
 }
+
+/* ── App Shell ──────────────────────────────────────────────────────────────── */
+.app-layout {
+  min-height: 100vh;
+}
+.app-header {
+  background: #0b0d10;
+  border-bottom: 1px solid #1f2937;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 16px;
+}
+.app-logo-link {
+  color: inherit;
+  text-decoration: none;
+  display: flex;
+  align-items: center;
+}
+.app-logo-title {
+  font-weight: 700;
+  font-size: 18px;
+}
+.app-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.app-header-btn {
+  color: #9ca3af !important;
+}
+.app-header-username {
+  color: #9ca3af;
+  font-size: 13px;
+}
+.app-content {
+  padding: 16px;
+}
+
+/* ── Auth Pages ─────────────────────────────────────────────────────────────── */
+.auth-page {
+  min-height: 100vh;
+  background: #0b0d10;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+}
+.auth-card {
+  max-width: 400px;
+  width: 100%;
+  margin: 80px 16px 0;
+}
+.auth-title {
+  margin-bottom: 24px !important;
+}
+.auth-error {
+  margin-bottom: 16px;
+}
+.auth-footer {
+  text-align: center;
+}
+
+/* ── Session List ───────────────────────────────────────────────────────────── */
+.session-list-page {
+  padding: 24px 32px;
+}
+.session-list-title {
+  margin-bottom: 24px !important;
+}
+.session-list-hosts {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+.session-list-loading {
+  padding: 64px;
+  text-align: center;
+}
+.session-list-empty {
+  padding: 48px;
+  text-align: center;
+}
+.session-gpu-tag {
+  font-size: 10px;
+}
+.session-id-text {
+  font-family: monospace;
+  font-size: 11px;
+}
+.session-gpus-text {
+  font-size: 11px;
+}
+.host-icon {
+  font-size: 16px;
+  color: #60a5fa;
+  margin-right: 10px;
+}
+.host-name {
+  font-weight: 600;
+  font-size: 15px;
+}
+.host-ip {
+  font-size: 12px;
+  margin-left: 10px;
+}
+.host-session-count {
+  margin-left: 12px;
+}
+.host-sessions-wrap {
+  margin-top: 16px;
+}
+
+/* ── API Keys ───────────────────────────────────────────────────────────────── */
+.api-keys-page {
+  padding: 24px 32px;
+  max-width: 900px;
+}
+.api-keys-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 24px;
+}
+.api-keys-title {
+  margin: 0 !important;
+}
+.api-keys-title-icon {
+  margin-right: 8px;
+}
+.api-key-prefix {
+  font-family: monospace;
+}
+.api-keys-alert {
+  margin-bottom: 16px;
+}
+.api-keys-form-actions {
+  margin-bottom: 0 !important;
+  text-align: right;
+}
+.api-keys-key-row {
+  margin-top: 12px;
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+.api-keys-key-text {
+  margin: 0 !important;
+  flex: 1;
+  padding: 8px 12px;
+  background: #111827;
+  border-radius: 6px;
+  word-break: break-all;
+}
+.api-keys-config-block {
+  margin-top: 16px;
+}
+.api-keys-config-code {
+  margin-top: 8px !important;
+  font-size: 12px;
+}
+
+/* ── Errors ─────────────────────────────────────────────────────────────────── */
+.fullpage-center {
+  height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
