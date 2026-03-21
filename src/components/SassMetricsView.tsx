@@ -90,7 +90,7 @@ export default function SassMetricsView() {
           functionName: s.functionName ?? '',
           sourceFile: s.sourceFile ?? '',
           sourceLine: s.sourceLine ?? null,
-          tsNs: s.tsNs,
+          tsNs: s.tsNs ?? 0,
         })
       }
       const entry = corrMap.get(pcOffset)!

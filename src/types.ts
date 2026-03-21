@@ -73,6 +73,7 @@ export interface HostMetricSample {
   time: string;
   tsNs: number;
   hostname: string;
+  ipAddr?: string;
   cpuPct: number;
   ramUsedMib: number;
   ramTotalMib: number;
@@ -146,6 +147,11 @@ export interface ProfileSample {
   reasonName?: string;
   sampleCount: number;
   occurrenceCount: number;
+  corrId?: number;
+  scopeId?: string;
+  tsNs?: number;
+  metricName?: string;
+  metricValue?: number;
 }
 
 export interface InsightDto {
