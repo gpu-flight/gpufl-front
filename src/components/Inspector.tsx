@@ -182,6 +182,10 @@ export default function Inspector() {
                 e.limitingResource != null ||
                 e.numRegs != null ||
                 e.localMemTotalBytes != null ||
+                e.localMemPerThreadBytes != null ||
+                e.cacheConfigRequested != null ||
+                e.cacheConfigExecuted != null ||
+                e.sharedMemExecutedBytes != null ||
                 e.dynSharedBytes != null ||
                 e.staticSharedBytes != null
               ) && (
@@ -221,15 +225,39 @@ export default function Inspector() {
                         {e.numRegs}
                       </Descriptions.Item>
                     )}
+                    {e.localMemPerThreadBytes != null && (
+                      <Descriptions.Item label="Spill / Thread">
+                        <span style={{ color: e.localMemPerThreadBytes > 0 ? '#ef4444' : undefined }}>
+                          {e.localMemPerThreadBytes === 0 ? '0 B (no spill)' : `${e.localMemPerThreadBytes} B`}
+                        </span>
+                      </Descriptions.Item>
+                    )}
                     {e.localMemTotalBytes != null && (
-                      <Descriptions.Item label="Local Mem (spill)">
+                      <Descriptions.Item label="Spill Total">
                         <span style={{ color: e.localMemTotalBytes > 0 ? '#ef4444' : undefined }}>
                           {e.localMemTotalBytes === 0
                             ? '0 B'
                             : e.localMemTotalBytes < 1024
-                            ? `${e.localMemTotalBytes} B`
-                            : `${(e.localMemTotalBytes / 1024).toFixed(1)} KB`}
+                              ? `${e.localMemTotalBytes} B`
+                              : `${(e.localMemTotalBytes / 1024).toFixed(1)} KB`}
                         </span>
+                      </Descriptions.Item>
+                    )}
+                    {e.cacheConfigRequested != null && (
+                      <Descriptions.Item label="Cache Config (requested)">
+                        {e.cacheConfigRequested}
+                      </Descriptions.Item>
+                    )}
+                    {e.cacheConfigExecuted != null && (
+                      <Descriptions.Item label="Cache Config (executed)">
+                        {e.cacheConfigExecuted}
+                      </Descriptions.Item>
+                    )}
+                    {e.sharedMemExecutedBytes != null && (
+                      <Descriptions.Item label="Shared Mem Executed">
+                        {e.sharedMemExecutedBytes < 1024
+                          ? `${e.sharedMemExecutedBytes} B`
+                          : `${(e.sharedMemExecutedBytes / 1024).toFixed(1)} KB`}
                       </Descriptions.Item>
                     )}
                     {(e.dynSharedBytes != null || e.staticSharedBytes != null) && (

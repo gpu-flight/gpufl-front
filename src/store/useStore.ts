@@ -152,6 +152,10 @@ export const useStore = create<AppState>((set, get) => ({
             blockOccupancy: k.blockOccupancy != null ? Number(k.blockOccupancy) : undefined,
             limitingResource: k.limitingResource,
             localMemTotalBytes: k.localMemTotalBytes,
+            localMemPerThreadBytes: k.localMemPerThreadBytes,
+            cacheConfigRequested: k.cacheConfigRequested,
+            cacheConfigExecuted: k.cacheConfigExecuted,
+            sharedMemExecutedBytes: k.sharedMemExecutedBytes,
             dynSharedBytes: k.dynSharedBytes,
             staticSharedBytes: k.staticSharedBytes,
           };

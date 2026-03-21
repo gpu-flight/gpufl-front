@@ -102,11 +102,11 @@ function KernelDetails({ event }: { event: TraceEvent }) {
         {e.block && <Chip label="block" value={e.block} />}
         <Chip label="gpu" value={fmtDur(avgDur)} valueColor="#34d399" />
         {count > 1 && <Chip label="calls" value={`${count}×`} valueColor="#a78bfa" />}
-        {e.localMemTotalBytes != null && (
+        {e.localMemPerThreadBytes != null && (
           <Chip
-            label="local mem"
-            value={fmtBytes(e.localMemTotalBytes)}
-            valueColor={e.localMemTotalBytes > 0 ? '#ef4444' : '#6b7280'}
+            label="spill/thread"
+            value={e.localMemPerThreadBytes === 0 ? 'none' : `${e.localMemPerThreadBytes} B`}
+            valueColor={e.localMemPerThreadBytes > 0 ? '#ef4444' : '#6b7280'}
           />
         )}
         {(e.dynSharedBytes != null && e.dynSharedBytes > 0) && (
