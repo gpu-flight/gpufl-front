@@ -1,4 +1,4 @@
-const BASE_URL = 'http://192.168.254.31:8080'
+const BASE_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:8080'
 
 export async function apiFetch(path: string, options: RequestInit = {}): Promise<Response> {
   const token = localStorage.getItem('auth_token')
