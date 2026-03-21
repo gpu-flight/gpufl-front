@@ -53,6 +53,10 @@ export interface TraceEvent {
   blockOccupancy?: number;
   limitingResource?: string;
   localMemTotalBytes?: number;
+  localMemPerThreadBytes?: number;
+  cacheConfigRequested?: number;
+  cacheConfigExecuted?: number;
+  sharedMemExecutedBytes?: number;
   dynSharedBytes?: number;
   staticSharedBytes?: number;
 
