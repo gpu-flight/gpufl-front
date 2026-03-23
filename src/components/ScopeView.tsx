@@ -82,10 +82,9 @@ function divergenceColor(avg: number): string {
 
 interface SassRow {
   key: string
-  pcOffset: string
+  pcOffset: number | null
   functionName: string
   sourceFile: string
-  sourceLine: number | null
   instExecuted: number
   threadInstExecuted: number
   avgActiveThreads: number
@@ -93,23 +92,41 @@ interface SassRow {
   occurrenceCount: number
 }
 
+function parseFunctionKey(raw?: string): { name: string; sourceFile: string } {
+  if (!raw) return { name: '', sourceFile: '' }
+  const at = raw.lastIndexOf('@')
+  if (at === -1) return { name: raw, sourceFile: '' }
+  return { name: raw.slice(0, at), sourceFile: raw.slice(at + 1) }
+}
+
 function buildSassRows(samples: ProfileSample[]): SassRow[] {
-  const rows: SassRow[] = []
+  // Aggregate instExecuted / threadInstExecuted from metricName+metricValue per pcOffset
+  const agg = new Map<number | null, { inst: number; thread: number; functionName: string; sourceFile: string; occurrenceCount: number }>()
   for (const s of samples) {
-    if (s.instExecuted === 0) continue
-    const avg = Math.min(32, s.threadInstExecuted / s.instExecuted)
-    const pcKey = `${s.functionName ?? ''}::${s.pcOffset ?? '0x0'}`
+    const pc = s.pcOffset ?? null
+    if (!agg.has(pc)) {
+      const { name, sourceFile } = parseFunctionKey(s.functionName)
+      agg.set(pc, { inst: 0, thread: 0, functionName: name, sourceFile, occurrenceCount: 0 })
+    }
+    const entry = agg.get(pc)!
+    entry.occurrenceCount += s.occurrenceCount
+    if (s.metricName === 'smsp__sass_inst_executed') entry.inst += s.metricValue ?? 0
+    else if (s.metricName === 'smsp__sass_thread_inst_executed') entry.thread += s.metricValue ?? 0
+  }
+  const rows: SassRow[] = []
+  for (const [pcOffset, vals] of agg.entries()) {
+    if (vals.inst === 0) continue
+    const avg = Math.min(32, vals.thread / vals.inst)
     rows.push({
-      key: pcKey,
-      pcOffset: s.pcOffset ?? '0x0',
-      functionName: s.functionName ?? '',
-      sourceFile: s.sourceFile ?? '',
-      sourceLine: s.sourceLine ?? null,
-      instExecuted: s.instExecuted,
-      threadInstExecuted: s.threadInstExecuted,
+      key: `${pcOffset}`,
+      pcOffset,
+      functionName: vals.functionName,
+      sourceFile: vals.sourceFile,
+      instExecuted: vals.inst,
+      threadInstExecuted: vals.thread,
       avgActiveThreads: avg,
       divergencePct: ((32 - avg) / 32) * 100,
-      occurrenceCount: s.occurrenceCount,
+      occurrenceCount: vals.occurrenceCount,
     })
   }
   return rows.sort((a, b) => a.avgActiveThreads - b.avgActiveThreads)
@@ -120,7 +137,11 @@ const SASS_COLUMNS: ColumnsType<SassRow> = [
     title: 'PC Offset',
     dataIndex: 'pcOffset',
     width: 100,
-    render: (v: string) => <span style={{ fontFamily: 'monospace', fontSize: 12 }}>{v}</span>,
+    render: (v: number | null) => (
+      <span style={{ fontFamily: 'monospace', fontSize: 12 }}>
+        {v != null ? `0x${v.toString(16)}` : '—'}
+      </span>
+    ),
   },
   {
     title: 'Function',
@@ -130,12 +151,12 @@ const SASS_COLUMNS: ColumnsType<SassRow> = [
   },
   {
     title: 'Source',
-    key: 'source',
+    dataIndex: 'sourceFile',
     ellipsis: true,
-    render: (_: unknown, r: SassRow) => {
-      if (!r.sourceFile) return <span style={{ color: '#6b7280', fontSize: 12 }}>—</span>
-      const basename = r.sourceFile.split('/').pop() ?? r.sourceFile
-      return <span style={{ fontFamily: 'monospace', fontSize: 12 }} title={r.sourceFile}>{basename}{r.sourceLine != null ? `:${r.sourceLine}` : ''}</span>
+    render: (v: string) => {
+      if (!v) return <span style={{ color: '#6b7280', fontSize: 12 }}>—</span>
+      const basename = v.split('/').pop() ?? v
+      return <span style={{ fontFamily: 'monospace', fontSize: 12 }} title={v}>{basename}</span>
     },
   },
   {
