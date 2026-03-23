@@ -136,22 +136,15 @@ export interface ProfileSample {
   id: string;
   sessionId: string;
   scopeName?: string;
+  deviceId?: number;
   sampleKind: 'sass_metric' | 'pc_sampling';
-  functionName?: string;
-  pcOffset?: string;
-  sourceFile?: string;
-  sourceLine?: number;
-  instExecuted: number;
-  threadInstExecuted: number;
+  functionName?: string;  // stored as "name@sourceFile" from client dict
+  pcOffset?: number;
   stallReason?: number;
-  reasonName?: string;
-  sampleCount: number;
   occurrenceCount: number;
-  corrId?: number;
-  scopeId?: string;
-  tsNs?: number;
   metricName?: string;
   metricValue?: number;
+  createdAt?: string;
 }
 
 export interface InsightDto {

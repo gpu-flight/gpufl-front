@@ -16,7 +16,25 @@ interface StallReasonChartProps {
   samples: ProfileSample[]
 }
 
-const MEMORY_KEYWORDS = ['MEM', 'L1', 'L2', 'TEXTURE']
+// CUPTI CUpti_ActivityPCSamplingStallReason integer → display name
+const STALL_REASON_NAMES: Record<number, string> = {
+  0: 'Invalid',
+  1: 'None',
+  2: 'Instruction Fetch',
+  3: 'Execution Dependency',
+  4: 'Memory Dependency',
+  5: 'Texture',
+  6: 'Sync',
+  7: 'Constant Memory',
+  8: 'Pipe Busy',
+  9: 'Memory Throttle',
+  10: 'Branch Resolving',
+  11: 'Wait',
+  12: 'Barrier',
+  13: 'Sleeping',
+}
+
+const MEMORY_KEYWORDS = ['MEM', 'TEXTURE', 'L1', 'L2']
 
 function isMemoryReason(reasonName: string): boolean {
   const upper = reasonName.toUpperCase()
@@ -26,14 +44,14 @@ function isMemoryReason(reasonName: string): boolean {
 export default function StallReasonChart({ samples }: StallReasonChartProps) {
   const chartData = useMemo(() => {
     const pcSamples = samples.filter(
-      (s) => s.sampleKind === 'pc_sampling' && s.reasonName != null,
+      (s) => s.sampleKind === 'pc_sampling' && s.stallReason != null && s.stallReason !== 0 && s.stallReason !== 1,
     )
     if (pcSamples.length === 0) return []
 
     const counts = new Map<string, number>()
     for (const s of pcSamples) {
-      const name = s.reasonName!
-      counts.set(name, (counts.get(name) ?? 0) + s.sampleCount)
+      const name = STALL_REASON_NAMES[s.stallReason!] ?? `Stall#${s.stallReason}`
+      counts.set(name, (counts.get(name) ?? 0) + (s.metricValue ?? s.occurrenceCount))
     }
 
     const total = [...counts.values()].reduce((a, b) => a + b, 0)

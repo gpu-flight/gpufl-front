@@ -1,28 +1,32 @@
-import React, { useMemo, useState } from 'react'
+import { useMemo, useState } from 'react'
 import { Table } from 'antd'
 import type { ColumnsType } from 'antd/es/table'
 import { useStore } from '@/store/useStore'
-import { formatWallClock, fmtRelNs } from '@/utils/timeFormat'
 
 interface InstructionRow {
   key: string
-  pcOffset: string
+  pcOffset: number | null
   functionName: string
   sourceFile: string
-  sourceLine: number | null
-  tsNs: number
   instExecuted: number
   threadInstExecuted: number
   avgActiveThreads: number
   divergencePct: number
 }
 
-interface KernelEntry {
+interface ScopeEntry {
   groupKey: string
-  kernelName: string
-  startTsNs: number
+  scopeName: string
   avgActiveThreads: number
   rows: InstructionRow[]
+}
+
+// functionName is stored as "name@sourceFile" from the client dictionary
+function parseFunctionKey(raw?: string): { name: string; sourceFile: string } {
+  if (!raw) return { name: '', sourceFile: '' }
+  const at = raw.lastIndexOf('@')
+  if (at === -1) return { name: raw, sourceFile: '' }
+  return { name: raw.slice(0, at), sourceFile: raw.slice(at + 1) }
 }
 
 function divergenceColor(avg: number): string {
@@ -39,61 +43,31 @@ function rowBackground(avg: number): React.CSSProperties {
 
 export default function SassMetricsView() {
   const profileSamples = useStore((s) => s.profileSamples)
-  const events = useStore((s) => s.events)
   const currentSessionId = useStore((s) => s.currentSessionId)
-  const globalRange = useStore((s) => s.globalRange)
-  const sessionStartNs = globalRange?.start_ns
   const [selectedGroupKey, setSelectedGroupKey] = useState<string | null>(null)
 
-  const kernelMap = useMemo(() => {
-    const m = new Map<number, string>()
-    for (const e of events) {
-      if (e.type === 'kernel' && e.sessionId === currentSessionId) {
-        const corrId = (e as any).corrId ?? (e as any).corr_id
-        if (corrId != null) m.set(corrId, e.name)
-      }
-    }
-    return m
-  }, [events, currentSessionId])
-
-  const scopeMap = useMemo(() => {
-    const m = new Map<string, string>()
-    for (const e of events) {
-      if (e.type === 'scope' && e.sessionId === currentSessionId) {
-        m.set(e.id, e.name)
-      }
-    }
-    return m
-  }, [events, currentSessionId])
-
-  const kernelEntries: KernelEntry[] = useMemo(() => {
+  const scopeEntries: ScopeEntry[] = useMemo(() => {
     const sassSamples = profileSamples.filter(
       (s) => s.sampleKind === 'sass_metric' && s.sessionId === currentSessionId,
     )
 
-    // Group key: for SASS metrics (corrId=0), use scopeId; for PC sampling, use corrId
-    type PcKey = string
+    // Group by scopeName (resolved string stored directly in the DB row)
+    type PcKey = number | null
     const pcData = new Map<
       string,
-      Map<PcKey, { instExecuted: number; threadInstExecuted: number; functionName: string; sourceFile: string; sourceLine: number | null; tsNs: number }>
+      Map<PcKey, { instExecuted: number; threadInstExecuted: number; functionName: string; sourceFile: string }>
     >()
 
     for (const s of sassSamples) {
-      const groupKey = s.corrId === 0 ? `scope:${s.scopeId ?? 'unknown'}` : `corr:${s.corrId}`
-      const pcOffset = s.pcOffset ?? '0x0'
+      const groupKey = s.scopeName ?? '(no scope)'
+      const pcKey = s.pcOffset ?? null
       if (!pcData.has(groupKey)) pcData.set(groupKey, new Map())
-      const corrMap = pcData.get(groupKey)!
-      if (!corrMap.has(pcOffset)) {
-        corrMap.set(pcOffset, {
-          instExecuted: 0,
-          threadInstExecuted: 0,
-          functionName: s.functionName ?? '',
-          sourceFile: s.sourceFile ?? '',
-          sourceLine: s.sourceLine ?? null,
-          tsNs: s.tsNs ?? 0,
-        })
+      const pcMap = pcData.get(groupKey)!
+      if (!pcMap.has(pcKey)) {
+        const { name, sourceFile } = parseFunctionKey(s.functionName)
+        pcMap.set(pcKey, { instExecuted: 0, threadInstExecuted: 0, functionName: name, sourceFile })
       }
-      const entry = corrMap.get(pcOffset)!
+      const entry = pcMap.get(pcKey)!
       if (s.metricName === 'smsp__sass_inst_executed') {
         entry.instExecuted += s.metricValue ?? 0
       } else if (s.metricName === 'smsp__sass_thread_inst_executed') {
@@ -101,7 +75,7 @@ export default function SassMetricsView() {
       }
     }
 
-    const result: KernelEntry[] = []
+    const result: ScopeEntry[] = []
     for (const [groupKey, pcMap] of pcData.entries()) {
       const rows: InstructionRow[] = []
       for (const [pcOffset, vals] of pcMap.entries()) {
@@ -112,8 +86,6 @@ export default function SassMetricsView() {
           pcOffset,
           functionName: vals.functionName,
           sourceFile: vals.sourceFile,
-          sourceLine: vals.sourceLine,
-          tsNs: vals.tsNs,
           instExecuted: vals.instExecuted,
           threadInstExecuted: vals.threadInstExecuted,
           avgActiveThreads: avg,
@@ -122,63 +94,33 @@ export default function SassMetricsView() {
       }
       rows.sort((a, b) => a.avgActiveThreads - b.avgActiveThreads)
 
-      // Weighted mean across instructions
       let totalInst = 0
       let weightedSum = 0
       for (const r of rows) {
         totalInst += r.instExecuted
         weightedSum += r.avgActiveThreads * r.instExecuted
       }
-      const sessionAvg = totalInst > 0 ? weightedSum / totalInst : 0
+      const scopeAvg = totalInst > 0 ? weightedSum / totalInst : 0
 
-      const startTsNs = rows.length > 0 ? Math.min(...rows.map((r) => r.tsNs)) : 0
-
-      // Resolve display name: scope name for SASS metrics, kernel name for PC sampling
-      let displayName: string
-      if (groupKey.startsWith('scope:')) {
-        const scopeId = groupKey.slice('scope:'.length)
-        displayName = scopeMap.get(scopeId) ?? `scope:${scopeId.slice(0, 8)}`
-      } else {
-        const corrId = parseInt(groupKey.slice('corr:'.length), 10)
-        displayName = kernelMap.get(corrId) ?? `corr_id:${corrId}`
-      }
-
-      result.push({
-        groupKey,
-        kernelName: displayName,
-        startTsNs,
-        avgActiveThreads: sessionAvg,
-        rows,
-      })
+      result.push({ groupKey, scopeName: groupKey, avgActiveThreads: scopeAvg, rows })
     }
 
     result.sort((a, b) => a.avgActiveThreads - b.avgActiveThreads)
     return result
-  }, [profileSamples, currentSessionId, kernelMap, scopeMap])
+  }, [profileSamples, currentSessionId])
 
-  const selectedKernel = kernelEntries.find((k) => k.groupKey === selectedGroupKey) ?? kernelEntries[0] ?? null
+  const selectedScope = scopeEntries.find((e) => e.groupKey === selectedGroupKey) ?? scopeEntries[0] ?? null
 
   const columns: ColumnsType<InstructionRow> = [
-    {
-      title: 'Time',
-      dataIndex: 'tsNs',
-      width: 160,
-      render: (v: number) => (
-        <span style={{ fontFamily: 'monospace', fontSize: 12 }}>
-          {formatWallClock(v)}
-          {sessionStartNs != null && (
-            <span style={{ color: '#6b7280', marginLeft: 4 }}>
-              t+{fmtRelNs(v - sessionStartNs)}
-            </span>
-          )}
-        </span>
-      ),
-    },
     {
       title: 'PC Offset',
       dataIndex: 'pcOffset',
       width: 110,
-      render: (v: string) => <span style={{ fontFamily: 'monospace', fontSize: 12 }}>{v}</span>,
+      render: (v: number | null) => (
+        <span style={{ fontFamily: 'monospace', fontSize: 12 }}>
+          {v != null ? `0x${v.toString(16)}` : '—'}
+        </span>
+      ),
     },
     {
       title: 'Function',
@@ -188,18 +130,12 @@ export default function SassMetricsView() {
     },
     {
       title: 'Source',
-      key: 'source',
+      dataIndex: 'sourceFile',
       ellipsis: true,
-      render: (_: unknown, record: InstructionRow) => {
-        const file = record.sourceFile
-        const line = record.sourceLine
-        if (!file) return <span style={{ color: '#6b7280', fontSize: 12 }}>—</span>
-        const basename = file.split('/').pop() ?? file
-        return (
-          <span style={{ fontFamily: 'monospace', fontSize: 12 }} title={file}>
-            {basename}{line != null ? `:${line}` : ''}
-          </span>
-        )
+      render: (v: string) => {
+        if (!v) return <span style={{ color: '#6b7280', fontSize: 12 }}>—</span>
+        const basename = v.split('/').pop() ?? v
+        return <span style={{ fontFamily: 'monospace', fontSize: 12 }} title={v}>{basename}</span>
       },
     },
     {
@@ -236,7 +172,7 @@ export default function SassMetricsView() {
     },
   ]
 
-  if (kernelEntries.length === 0) {
+  if (scopeEntries.length === 0) {
     return (
       <div style={{ padding: 32, color: '#6b7280', textAlign: 'center' }}>
         No SASS metric data for this session. Run the agent with <code>SassMetrics</code> engine enabled.
@@ -246,7 +182,7 @@ export default function SassMetricsView() {
 
   return (
     <div style={{ display: 'flex', height: '100%', overflow: 'hidden' }}>
-      {/* Left panel — kernel list */}
+      {/* Left panel — scope list */}
       <div
         style={{
           width: 260,
@@ -256,12 +192,12 @@ export default function SassMetricsView() {
           padding: '8px 0',
         }}
       >
-        {kernelEntries.map((k) => {
-          const isSelected = selectedGroupKey === k.groupKey || (selectedGroupKey === null && k === kernelEntries[0])
+        {scopeEntries.map((entry) => {
+          const isSelected = selectedGroupKey === entry.groupKey || (selectedGroupKey === null && entry === scopeEntries[0])
           return (
             <div
-              key={k.groupKey}
-              onClick={() => setSelectedGroupKey(k.groupKey)}
+              key={entry.groupKey}
+              onClick={() => setSelectedGroupKey(entry.groupKey)}
               style={{
                 padding: '8px 12px',
                 cursor: 'pointer',
@@ -278,9 +214,9 @@ export default function SassMetricsView() {
                   textOverflow: 'ellipsis',
                   whiteSpace: 'nowrap',
                 }}
-                title={k.kernelName}
+                title={entry.scopeName}
               >
-                {k.kernelName}
+                {entry.scopeName}
               </div>
               <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 2 }}>
                 <span
@@ -288,19 +224,13 @@ export default function SassMetricsView() {
                     width: 8,
                     height: 8,
                     borderRadius: '50%',
-                    background: divergenceColor(k.avgActiveThreads),
+                    background: divergenceColor(entry.avgActiveThreads),
                     flexShrink: 0,
                   }}
                 />
                 <span style={{ fontSize: 11, color: '#9ca3af' }}>
-                  avg {k.avgActiveThreads.toFixed(1)} threads/warp
+                  avg {entry.avgActiveThreads.toFixed(1)} threads/warp
                 </span>
-              </div>
-              <div style={{ fontSize: 11, color: '#6b7280', marginTop: 2, fontFamily: 'monospace' }}>
-                {formatWallClock(k.startTsNs)}
-                {sessionStartNs != null && (
-                  <span style={{ marginLeft: 4 }}>t+{fmtRelNs(k.startTsNs - sessionStartNs)}</span>
-                )}
               </div>
             </div>
           )
@@ -309,16 +239,16 @@ export default function SassMetricsView() {
 
       {/* Right panel — instruction table */}
       <div style={{ flex: 1, overflow: 'auto', padding: 16 }}>
-        {selectedKernel && (
+        {selectedScope && (
           <>
             <div style={{ marginBottom: 12, fontSize: 13, color: '#9ca3af' }}>
-              <span style={{ color: '#e5e7eb', fontWeight: 600 }}>{selectedKernel.kernelName}</span>
-              &nbsp;— {selectedKernel.rows.length} instructions
+              <span style={{ color: '#e5e7eb', fontWeight: 600 }}>{selectedScope.scopeName}</span>
+              &nbsp;— {selectedScope.rows.length} instructions
             </div>
             <Table
               size="small"
               columns={columns}
-              dataSource={selectedKernel.rows}
+              dataSource={selectedScope.rows}
               pagination={false}
               scroll={{ y: 'calc(100vh - 280px)' }}
               onRow={(record) => ({ style: rowBackground(record.avgActiveThreads) })}
