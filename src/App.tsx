@@ -1,7 +1,7 @@
 import React, { useEffect } from 'react'
 import { Outlet, Link, useNavigate } from 'react-router-dom'
-import { ConfigProvider, theme, Layout, Button } from 'antd'
-import { HomeOutlined, LogoutOutlined, KeyOutlined } from '@ant-design/icons'
+import { ConfigProvider, theme, Layout, Button, Tag } from 'antd'
+import { HomeOutlined, LogoutOutlined, KeyOutlined, LinkOutlined } from '@ant-design/icons'
 import { useStore } from './store/useStore'
 import { useAuthStore } from './store/useAuthStore'
 
@@ -11,7 +11,10 @@ export default function App() {
   const fetchInit = useStore((s) => s.fetchInit)
   const logout = useAuthStore((s) => s.logout)
   const username = useAuthStore((s) => s.username)
+  const role = useAuthStore((s) => s.role)
   const navigate = useNavigate()
+  const isDemo = role === 'DEMO'
+
   useEffect(() => {
     fetchInit()
   }, [fetchInit])
@@ -42,16 +45,28 @@ export default function App() {
                 Home
               </Button>
             </Link>
-            <Link to="/api-keys">
-              <Button type="text" icon={<KeyOutlined />} className="app-header-btn">
-                API Keys
-              </Button>
-            </Link>
+            {!isDemo && (
+              <>
+                <Link to="/api-keys">
+                  <Button type="text" icon={<KeyOutlined />} className="app-header-btn">
+                    API Keys
+                  </Button>
+                </Link>
+                <Link to="/demo-links">
+                  <Button type="text" icon={<LinkOutlined />} className="app-header-btn">
+                    Demo Links
+                  </Button>
+                </Link>
+              </>
+            )}
             {username && (
-              <span className="app-header-username">{username}</span>
+              <span className="app-header-username">
+                {username}
+                {isDemo && <Tag color="orange" style={{ marginLeft: 8 }}>Demo</Tag>}
+              </span>
             )}
             <Button type="text" icon={<LogoutOutlined />} className="app-header-btn" onClick={handleLogout}>
-              Logout
+              {isDemo ? 'Exit Demo' : 'Logout'}
             </Button>
           </div>
         </Header>

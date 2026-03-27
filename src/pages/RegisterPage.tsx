@@ -1,11 +1,14 @@
 import React, { useState } from 'react'
 import { Form, Input, Button, Typography, Alert, ConfigProvider, theme } from 'antd'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link, useNavigate, Navigate } from 'react-router-dom'
 import { useAuthStore } from '@/store/useAuthStore'
 
 const { Title } = Typography
 
+const registerEnabled = import.meta.env.VITE_DISABLE_REGISTER !== 'true'
+
 export default function RegisterPage() {
+  if (!registerEnabled) return <Navigate to="/login" replace />
   const register = useAuthStore((s) => s.register)
   const navigate = useNavigate()
   const [error, setError] = useState<string | null>(null)

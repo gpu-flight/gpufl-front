@@ -5,6 +5,8 @@ import { useAuthStore } from '@/store/useAuthStore'
 
 const { Title } = Typography
 
+const registerEnabled = import.meta.env.VITE_DISABLE_REGISTER !== 'true'
+
 export default function LoginPage() {
   const login = useAuthStore((s) => s.login)
   const navigate = useNavigate()
@@ -43,9 +45,11 @@ export default function LoginPage() {
               </Button>
             </Form.Item>
           </Form>
-          <div className="auth-footer">
-            No account? <Link to="/register">Register</Link>
-          </div>
+          {registerEnabled && (
+            <div className="auth-footer">
+              No account? <Link to="/register">Register</Link>
+            </div>
+          )}
         </div>
       </div>
     </ConfigProvider>

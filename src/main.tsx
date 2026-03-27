@@ -7,6 +7,8 @@ import Dashboard from './pages/Dashboard'
 import LoginPage from './pages/LoginPage'
 import RegisterPage from './pages/RegisterPage'
 import ApiKeysPage from './pages/ApiKeysPage'
+import DemoLinksPage from './pages/DemoLinksPage'
+import DemoAuthPage from './pages/DemoAuthPage'
 import ProtectedRoute from './components/ProtectedRoute'
 import ErrorBoundary from './components/ErrorBoundary'
 import 'antd/dist/reset.css'
@@ -20,6 +22,10 @@ const router = createBrowserRouter([
   {
     path: '/register',
     element: <RegisterPage />,
+  },
+  {
+    path: '/demo/:token',
+    element: <DemoAuthPage />,
   },
   {
     path: '/',
@@ -41,6 +47,7 @@ const router = createBrowserRouter([
       { index: true, element: <SessionList /> },
       { path: 'dashboard/:sessionId', element: <Dashboard /> },
       { path: 'api-keys', element: <ApiKeysPage /> },
+      { path: 'demo-links', element: <DemoLinksPage /> },
     ],
   },
 ])
