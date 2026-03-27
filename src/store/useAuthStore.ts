@@ -7,9 +7,26 @@ interface AuthState {
   login: (emailOrUsername: string, password: string) => Promise<void>
   logout: () => void
   register: (email: string, username: string, password: string) => Promise<void>
+  exchangeDemo: (rawToken: string) => Promise<void>
 }
 
 const BASE_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:8080'
+
+async function parseErrorMessage(res: Response, fallback: string): Promise<string> {
+  const text = await res.text()
+  try {
+    const json = JSON.parse(text)
+    return json.message || json.error || fallback
+  } catch {
+    return text || fallback
+  }
+}
+
+function saveAuth(data: { token: string; username: string; role: string }) {
+  localStorage.setItem('auth_token', data.token)
+  localStorage.setItem('auth_username', data.username)
+  localStorage.setItem('auth_role', data.role)
+}
 
 export const useAuthStore = create<AuthState>((set) => ({
   token: localStorage.getItem('auth_token'),
@@ -23,13 +40,10 @@ export const useAuthStore = create<AuthState>((set) => ({
       body: JSON.stringify({ emailOrUsername, password }),
     })
     if (!res.ok) {
-      const err = await res.text()
-      throw new Error(err || 'Login failed')
+      throw new Error(await parseErrorMessage(res, 'Login failed'))
     }
     const data = await res.json()
-    localStorage.setItem('auth_token', data.token)
-    localStorage.setItem('auth_username', data.username)
-    localStorage.setItem('auth_role', data.role)
+    saveAuth(data)
     set({ token: data.token, username: data.username, role: data.role })
   },
 
@@ -47,13 +61,20 @@ export const useAuthStore = create<AuthState>((set) => ({
       body: JSON.stringify({ email, username, password }),
     })
     if (!res.ok) {
-      const err = await res.text()
-      throw new Error(err || 'Registration failed')
+      throw new Error(await parseErrorMessage(res, 'Registration failed'))
     }
     const data = await res.json()
-    localStorage.setItem('auth_token', data.token)
-    localStorage.setItem('auth_username', data.username)
-    localStorage.setItem('auth_role', data.role)
+    saveAuth(data)
+    set({ token: data.token, username: data.username, role: data.role })
+  },
+
+  exchangeDemo: async (rawToken) => {
+    const res = await fetch(`${BASE_URL}/api/v1/auth/demo/${rawToken}`)
+    if (!res.ok) {
+      throw new Error(await parseErrorMessage(res, 'Invalid or expired demo link'))
+    }
+    const data = await res.json()
+    saveAuth(data)
     set({ token: data.token, username: data.username, role: data.role })
   },
 }))
