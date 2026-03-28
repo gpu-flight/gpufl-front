@@ -43,31 +43,46 @@ export default function MetricsChart({ hostData, deviceData, globalRange, highli
   const metricsZoomRange = useStore((s) => s.metricsZoomRange)
   const setMetricsZoom = useStore((s) => s.setMetricsZoom)
 
-  // Session date/time header derived from globalRange
+  // chartRange is derived from the actual metric timestamps, NOT globalRange.
+  // globalRange can be dominated by short kernel events (e.g. 18 ms) which would
+  // clip metric samples that fall outside that narrow window.
+  const chartRange = useMemo(() => {
+    const allTs = [
+      ...(hostData || []).map(m => m.tsNs),
+      ...(deviceData || []).map(m => m.tsNs),
+    ]
+    if (allTs.length === 0) return globalRange
+    const minTs = Math.min(...allTs)
+    const maxTs = Math.max(...allTs)
+    if (minTs < maxTs) return { start_ns: minTs, end_ns: maxTs }
+    return { start_ns: minTs - 500_000, end_ns: minTs + 500_000 }
+  }, [hostData, deviceData, globalRange])
+
+  // Session date/time header derived from chartRange
   const sessionHeader = useMemo(() => {
-    if (!globalRange) return null
-    const startMs = globalRange.start_ns / 1_000_000
-    const endMs = globalRange.end_ns / 1_000_000
+    if (!chartRange) return null
+    const startMs = chartRange.start_ns / 1_000_000
+    const endMs = chartRange.end_ns / 1_000_000
     const startDate = fmtDate(startMs)
     const endDate = fmtDate(endMs)
     const startTime = fmtTime(startMs)
     const endTime = fmtTime(endMs)
     const sameDay = startDate === endDate
     return { date: startDate, startTime, endTime: sameDay ? endTime : `${endDate} ${endTime}` }
-  }, [globalRange])
+  }, [chartRange])
 
   const hostChartData = useMemo(() => {
-    if (!hostData || !globalRange) return []
-    const start = globalRange.start_ns
+    if (!hostData || !chartRange) return []
+    const start = chartRange.start_ns
     return hostData.map(m => ({
       ...m,
       ts_rel_us: nsToUs(m.tsNs - start)
     })).sort((a, b) => a.ts_rel_us - b.ts_rel_us)
-  }, [hostData, globalRange])
+  }, [hostData, chartRange])
 
   const deviceChartData = useMemo(() => {
-    if (!deviceData || !globalRange) return []
-    const start = globalRange.start_ns
+    if (!deviceData || !chartRange) return []
+    const start = chartRange.start_ns
     const byTs = new Map<number, any>()
     for (const m of deviceData) {
       const key = m.tsNs
@@ -82,7 +97,7 @@ export default function MetricsChart({ hostData, deviceData, globalRange, highli
       byTs.set(key, row)
     }
     return Array.from(byTs.values()).sort((a, b) => a.ts_rel_us - b.ts_rel_us)
-  }, [deviceData, globalRange])
+  }, [deviceData, chartRange])
 
   const deviceIds = useMemo(() => {
     if (!deviceData) return []
@@ -90,16 +105,16 @@ export default function MetricsChart({ hostData, deviceData, globalRange, highli
   }, [deviceData])
 
   const domain = useMemo(() => {
-    if (globalRange) {
-      const durationUs = nsToUs(globalRange.end_ns - globalRange.start_ns)
+    if (chartRange) {
+      const durationUs = nsToUs(chartRange.end_ns - chartRange.start_ns)
       return [0, Math.max(durationUs, 1)]
     }
     return ['dataMin', 'dataMax']
-  }, [globalRange])
+  }, [chartRange])
 
   const ticks = useMemo(() => {
-    if (!globalRange) return undefined
-    const durationUs = nsToUs(globalRange.end_ns - globalRange.start_ns)
+    if (!chartRange) return undefined
+    const durationUs = nsToUs(chartRange.end_ns - chartRange.start_ns)
 
     let step = 100
     if (durationUs > 1_000) step = 200
@@ -124,13 +139,13 @@ export default function MetricsChart({ hostData, deviceData, globalRange, highli
 
   // Format a relative-us tick as an absolute wall-clock time (HH:MM:SS or HH:MM:SS.mmm)
   const formatTickTime = (us: number) => {
-    if (!globalRange) return ''
-    const absMs = (globalRange.start_ns / 1_000_000) + (us / 1_000)
+    if (!chartRange) return ''
+    const absMs = (chartRange.start_ns / 1_000_000) + (us / 1_000)
     const d = new Date(absMs)
     const hh = String(d.getHours()).padStart(2, '0')
     const mm = String(d.getMinutes()).padStart(2, '0')
     const ss = String(d.getSeconds()).padStart(2, '0')
-    const durationUs = nsToUs(globalRange.end_ns - globalRange.start_ns)
+    const durationUs = nsToUs(chartRange.end_ns - chartRange.start_ns)
     // Show milliseconds only for short durations
     if (durationUs < 10_000_000) {
       const ms = String(d.getMilliseconds()).padStart(3, '0')
@@ -141,24 +156,24 @@ export default function MetricsChart({ hostData, deviceData, globalRange, highli
 
   // Tooltip label: full absolute timestamp
   const formatTooltipTime = (us: number) => {
-    if (!globalRange) return ''
-    const absMs = (globalRange.start_ns / 1_000_000) + (us / 1_000)
+    if (!chartRange) return ''
+    const absMs = (chartRange.start_ns / 1_000_000) + (us / 1_000)
     const d = new Date(absMs)
     return d.toLocaleTimeString([], { hour12: false }) + '.' + String(d.getMilliseconds()).padStart(3, '0')
   }
 
   const highlightArea = useMemo(() => {
-    if (!highlightRange || !globalRange) return null
+    if (!highlightRange || !chartRange) return null
     return (
       <ReferenceArea
-        x1={nsToUs(highlightRange.start_ns - globalRange.start_ns)}
-        x2={nsToUs(highlightRange.end_ns - globalRange.start_ns)}
+        x1={nsToUs(highlightRange.start_ns - chartRange.start_ns)}
+        x2={nsToUs(highlightRange.end_ns - chartRange.start_ns)}
         strokeOpacity={0.3}
         fill="#f59e0b"
         fillOpacity={0.15}
       />
     )
-  }, [highlightRange, globalRange])
+  }, [highlightRange, chartRange])
 
   const renderToggle = (key: MetricKey, label: string) => (
     <Checkbox

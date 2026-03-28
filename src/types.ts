@@ -101,6 +101,17 @@ export interface SystemMetricsResponse {
   deviceMetrics: DeviceMetricSample[];
 }
 
+export interface SystemEventRecord {
+  sessionId: string;
+  pid: number;
+  app: string;
+  name: string;
+  eventType: string;  // "system_start" | "system_stop"
+  tsNs: number;
+  rangeStart: number;
+  rangeEnd: number;
+}
+
 export interface RawSession {
   sessionId: string;
   app: string;
@@ -144,6 +155,9 @@ export interface ProfileSample {
   occurrenceCount: number;
   metricName?: string;
   metricValue?: number;
+  sourceFile?: string;
+  sourceLine?: number;
+  corrId?: number;
   createdAt?: string;
 }
 

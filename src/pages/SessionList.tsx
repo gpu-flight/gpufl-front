@@ -60,7 +60,7 @@ const sessionColumns: ColumnsType<SessionSummary> = [
     title: 'End Time',
     dataIndex: 'endTime',
     key: 'endTime',
-    render: (v?: string) => v ? dayjs(v).format('HH:mm:ss') : <Text type="secondary">running</Text>,
+    render: (v?: string) => v ? dayjs(v).format('YYYY-MM-DD HH:mm:ss') : <Text type="secondary">running</Text>,
   },
   {
     title: 'GPUs',
