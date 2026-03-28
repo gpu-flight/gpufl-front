@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { Session, TraceEvent, HostMetricSample, DeviceMetricSample, InitResponse, SystemMetricsResponse, HostSummary, ProfileSample, InsightDto } from '@/types';
+import { Session, TraceEvent, HostMetricSample, DeviceMetricSample, InitResponse, SystemMetricsResponse, SystemEventRecord, HostSummary, ProfileSample, InsightDto } from '@/types';
 import { apiFetch } from '@/api';
 
 export type HostMetricKey = 'cpuPct' | 'ramUsedMib' | 'ramTotalMib';
@@ -12,6 +12,7 @@ interface AppState {
   events: TraceEvent[];
   hostMetrics: HostMetricSample[];
   deviceMetrics: DeviceMetricSample[];
+  systemEvents: SystemEventRecord[];
   profileSamples: ProfileSample[];
   insights: InsightDto[] | null;
   metricsRange?: { start_ns: number; end_ns: number };
@@ -20,7 +21,7 @@ interface AppState {
   activeEventId?: string;
   highlightRange?: { start_ns: number; end_ns: number };
   metricVisibility: Record<MetricKey, boolean>;
-  activeTab: 'kernels' | 'scopes' | 'system' | 'insights';
+  activeTab: 'kernels' | 'scopes' | 'profile' | 'system' | 'insights';
   comparedScopeIds: string[];
   metricsZoomRange?: [number, number];
   activeScopeKey?: string;
@@ -39,7 +40,7 @@ interface AppState {
   setActiveEvent: (id?: string) => void;
   setMetricVisibility: (key: MetricKey, visible: boolean) => void;
   updateGlobalRange: () => void;
-  setActiveTab: (tab: 'kernels' | 'scopes' | 'system' | 'insights') => void;
+  setActiveTab: (tab: 'kernels' | 'scopes' | 'profile' | 'system' | 'insights') => void;
   toggleComparedScope: (id: string) => void;
   setMetricsZoom: (range?: [number, number]) => void;
   setActiveScopeKey: (key?: string) => void;
@@ -52,6 +53,7 @@ export const useStore = create<AppState>((set, get) => ({
   events: [],
   hostMetrics: [],
   deviceMetrics: [],
+  systemEvents: [],
   profileSamples: [],
   insights: null,
   metricsRange: undefined,
@@ -68,7 +70,7 @@ export const useStore = create<AppState>((set, get) => ({
     powerW: true,
     fanSpeedPct: false,
   },
-  activeTab: 'kernels' as 'kernels' | 'scopes' | 'system' | 'insights',
+  activeTab: 'kernels' as 'kernels' | 'scopes' | 'profile' | 'system' | 'insights',
   comparedScopeIds: [],
   metricsZoomRange: undefined,
   activeScopeKey: undefined,
@@ -221,60 +223,68 @@ export const useStore = create<AppState>((set, get) => ({
     try {
       const res = await apiFetch(`/api/v1/events/system?sessionId=${sessionId}`);
       if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
-      const rawData = await res.json();
-      
-      // The API returns an array of objects, take the first one
-      const data: SystemMetricsResponse = Array.isArray(rawData) ? rawData[0] : rawData;
-      
-      if (!data) {
-        set({ hostMetrics: [], deviceMetrics: [], metricsRange: undefined });
+      // API returns List<SystemEventDto>: each element is one system event with
+      // all session host/device metrics embedded. Take metrics from the first
+      // element (they're identical across all elements) and store all events.
+      const rawData: any[] = await res.json();
+
+      if (!Array.isArray(rawData) || rawData.length === 0) {
+        set({ systemEvents: [], hostMetrics: [], deviceMetrics: [], metricsRange: undefined });
         return;
       }
 
-      const hostMetrics = data.hostMetrics || [];
-      const deviceMetrics = (data.deviceMetrics || []).map((m: any) => ({
+      const systemEvents: SystemEventRecord[] = rawData.map((e: any) => ({
+        sessionId: e.sessionId,
+        pid: e.pid,
+        app: e.app,
+        name: e.name,
+        eventType: e.eventType,
+        tsNs: e.tsNs,
+        rangeStart: e.rangeStart,
+        rangeEnd: e.rangeEnd,
+      }));
+
+      const first = rawData[0];
+      const hostMetrics: HostMetricSample[] = first.hostMetrics || [];
+      const deviceMetrics = (first.deviceMetrics || []).map((m: any) => ({
         ...m,
-        // Map backend names to frontend expected names
         memUsedMib: m.memUsedMib ?? m.usedMib ?? 0,
         memTotalMib: m.memTotalMib ?? m.totalMib ?? 0,
         powerW: m.powerW ?? (m.powerMw ? m.powerMw / 1000 : 0),
         fanSpeedPct: m.fanSpeedPct ?? 0,
       }));
-      
-      let startNs = data.rangeStart;
-      let endNs = data.rangeEnd;
 
-      // Fallback: Calculate range from data if missing
-      if (!startNs || !endNs || startNs >= endNs) {
-        const allTs = [
-          ...hostMetrics.map(m => m.tsNs),
-          ...deviceMetrics.map(m => m.tsNs)
-        ];
-        if (allTs.length > 1) {
-          startNs = Math.min(...allTs);
-          endNs = Math.max(...allTs);
-        } else if (allTs.length === 1) {
-          startNs = allTs[0] - 500_000; // 0.5ms before
-          endNs = allTs[0] + 500_000;  // 0.5ms after
-        }
+      // Compute time range from actual metric timestamps (event rangeStart/End
+      // is just the event's own ts_ns, not the span of all metrics).
+      const allTs = [
+        ...hostMetrics.map((m: HostMetricSample) => m.tsNs),
+        ...deviceMetrics.map((m: any) => m.tsNs),
+      ];
+      let startNs: number | undefined;
+      let endNs: number | undefined;
+      if (allTs.length > 1) {
+        startNs = Math.min(...allTs);
+        endNs   = Math.max(...allTs);
+      } else if (allTs.length === 1) {
+        startNs = allTs[0] - 500_000;
+        endNs   = allTs[0] + 500_000;
       }
-
-      // Ensure minimum duration of 1us
-      if (startNs && endNs && endNs - startNs < 1_000) {
+      if (startNs != null && endNs != null && endNs - startNs < 1_000) {
         const center = (startNs + endNs) / 2;
         startNs = center - 500;
-        endNs = center + 500;
+        endNs   = center + 500;
       }
 
       set({
+        systemEvents,
         hostMetrics,
         deviceMetrics,
-        metricsRange: startNs && endNs ? { start_ns: startNs, end_ns: endNs } : undefined,
+        metricsRange: startNs != null && endNs != null ? { start_ns: startNs, end_ns: endNs } : undefined,
       });
       get().updateGlobalRange();
     } catch (err) {
       console.error('Failed to fetch system metrics', err);
-      set({ hostMetrics: [], deviceMetrics: [], metricsRange: undefined });
+      set({ systemEvents: [], hostMetrics: [], deviceMetrics: [], metricsRange: undefined });
     }
   },
   fetchProfileSamples: async (sessionId: string) => {
@@ -300,7 +310,7 @@ export const useStore = create<AppState>((set, get) => ({
     }
   },
   selectSession: (id: string) => {
-    set({ currentSessionId: id });
+    set({ currentSessionId: id, activeTab: 'kernels', activeEventId: undefined, highlightRange: undefined, profileSamples: [] });
     get().updateGlobalRange();
   },
   setActiveEvent: (id?: string) => {
