@@ -1,7 +1,8 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Table, Empty } from 'antd'
 import type { ColumnsType } from 'antd/es/table'
 import { useStore } from '@/store/useStore'
+import { apiFetch } from '@/api'
 
 interface SourceLineRow {
   key: string
@@ -11,6 +12,8 @@ interface SourceLineRow {
   instExec: number
   threadExec: number
   divergencePct: number | null
+  dominantPc: number | null
+  coalescingFactor: number | null  // actual / ideal sectors; 1.0 = perfectly coalesced
 }
 
 interface FunctionEntry {
@@ -34,6 +37,12 @@ function rowStyle(stallShare: number): React.CSSProperties {
   return {}
 }
 
+function coalColor(v: number): string {
+  if (v <= 1.5) return '#16a34a'  // near-ideal coalescing
+  if (v <= 4.0) return '#ca8a04'  // partial coalescing
+  return '#dc2626'                 // poor coalescing
+}
+
 function divColor(pct: number): string {
   if (pct > 20) return '#dc2626'
   if (pct > 10) return '#ca8a04'
@@ -44,6 +53,8 @@ export default function SourceCorrelationView() {
   const profileSamples = useStore((s) => s.profileSamples)
   const currentSessionId = useStore((s) => s.currentSessionId)
   const [selectedFuncKey, setSelectedFuncKey] = useState<string | null>(null)
+  const [sourceLines, setSourceLines] = useState<string[]>([])
+  const [disassembly, setDisassembly] = useState<Map<number, string>>(new Map())
 
   const functionEntries: FunctionEntry[] = useMemo(() => {
     const samples = profileSamples.filter((s) => s.sessionId === currentSessionId)
@@ -57,6 +68,10 @@ export default function SourceCorrelationView() {
       stallHits: number
       instExec: number
       threadExec: number
+      dominantPc: number | null
+      dominantPcHits: number
+      sectorsGlobal: number
+      sectorsGlobalIdeal: number
     }
 
     const lineMap = new Map<string, LineAgg>()
@@ -70,17 +85,35 @@ export default function SourceCorrelationView() {
       const lineKey = `${funcKey}::${sourceLine}`
 
       if (!lineMap.has(lineKey)) {
-        lineMap.set(lineKey, { funcKey, displayName, sourceFile, sourceLine, stallHits: 0, instExec: 0, threadExec: 0 })
+        lineMap.set(lineKey, { funcKey, displayName, sourceFile, sourceLine, stallHits: 0, instExec: 0, threadExec: 0, dominantPc: null, dominantPcHits: 0, sectorsGlobal: 0, sectorsGlobalIdeal: 0 })
       }
       const agg = lineMap.get(lineKey)!
 
       if (s.sampleKind === 'pc_sampling') {
-        agg.stallHits += s.occurrenceCount
+        const hits = s.occurrenceCount
+        agg.stallHits += hits
+        // PC sampling may have pc_offset=0 (not meaningful); prefer SASS-derived pc
+        const pc = (s.pcOffset != null && s.pcOffset > 0) ? s.pcOffset : null
+        if (pc != null && hits > agg.dominantPcHits) {
+          agg.dominantPc = pc
+          agg.dominantPcHits = hits
+        }
       } else if (s.sampleKind === 'sass_metric') {
         if (s.metricName === 'smsp__sass_inst_executed') {
           agg.instExec += s.metricValue ?? 0
+          // Use the instruction with the most executions as the representative PC
+          const pc = s.pcOffset ?? null
+          const val = s.metricValue ?? 0
+          if (pc != null && val > agg.dominantPcHits) {
+            agg.dominantPc = pc
+            agg.dominantPcHits = val
+          }
         } else if (s.metricName === 'smsp__sass_thread_inst_executed') {
           agg.threadExec += s.metricValue ?? 0
+        } else if (s.metricName === 'smsp__sass_sectors_mem_global') {
+          agg.sectorsGlobal += s.metricValue ?? 0
+        } else if (s.metricName === 'smsp__sass_sectors_mem_global_ideal') {
+          agg.sectorsGlobalIdeal += s.metricValue ?? 0
         }
       }
     }
@@ -109,6 +142,8 @@ export default function SourceCorrelationView() {
           instExec: l.instExec,
           threadExec: l.threadExec,
           divergencePct,
+          dominantPc: l.dominantPc,
+          coalescingFactor: l.sectorsGlobalIdeal > 0 ? l.sectorsGlobal / l.sectorsGlobalIdeal : null,
         }
       })
 
@@ -123,6 +158,32 @@ export default function SourceCorrelationView() {
   const selected =
     functionEntries.find((e) => e.funcKey === selectedFuncKey) ?? functionEntries[0] ?? null
 
+  // Fetch source lines whenever the selected function changes
+  useEffect(() => {
+    setSourceLines([])
+    if (!selected?.sourceFile || !currentSessionId) return
+    apiFetch(
+      `/api/v1/events/source-content?sessionId=${encodeURIComponent(currentSessionId)}&sourcePath=${encodeURIComponent(selected.sourceFile)}`
+    )
+      .then((r) => (r.ok ? r.json() : Promise.resolve([])))
+      .then((lines: string[]) => setSourceLines(lines))
+      .catch(() => setSourceLines([]))
+  }, [selected?.sourceFile, currentSessionId])
+
+  // Fetch SASS disassembly for the selected function
+  useEffect(() => {
+    setDisassembly(new Map())
+    if (!selected?.displayName || !currentSessionId) return
+    apiFetch(
+      `/api/v1/events/disassembly?sessionId=${encodeURIComponent(currentSessionId)}&functionName=${encodeURIComponent(selected.displayName)}`
+    )
+      .then((r) => (r.ok ? r.json() : Promise.resolve([])))
+      .then((entries: { pcOffset: number; sass: string }[]) =>
+        setDisassembly(new Map(entries.map((e) => [e.pcOffset, e.sass])))
+      )
+      .catch(() => {})
+  }, [selected?.funcKey, currentSessionId])
+
   const dash = <span style={{ color: '#4b5563' }}>—</span>
 
   const columns: ColumnsType<SourceLineRow> = [
@@ -133,6 +194,45 @@ export default function SourceCorrelationView() {
       render: (v: number | null) => (
         <span style={{ fontFamily: 'monospace', fontSize: 12 }}>{v != null ? v : dash}</span>
       ),
+    },
+    {
+      title: 'Code',
+      dataIndex: 'sourceLine',
+      key: 'code',
+      ellipsis: true,
+      render: (v: number | null) => {
+        const text = v != null && sourceLines.length >= v ? sourceLines[v - 1] : null
+        if (!text) return dash
+        return (
+          <code
+            style={{
+              fontSize: 11,
+              fontFamily: 'monospace',
+              color: '#93c5fd',
+              background: 'rgba(59,130,246,0.08)',
+              padding: '1px 4px',
+              borderRadius: 3,
+              whiteSpace: 'pre',
+            }}
+          >
+            {text.trimStart()}
+          </code>
+        )
+      },
+    },
+    {
+      title: 'SASS',
+      key: 'sass',
+      ellipsis: true,
+      render: (_: unknown, record: SourceLineRow) => {
+        const text = record.dominantPc != null ? disassembly.get(record.dominantPc) : null
+        if (!text) return dash
+        return (
+          <code style={{ fontSize: 10, fontFamily: 'monospace', color: '#86efac' }}>
+            {text}
+          </code>
+        )
+      },
     },
     {
       title: 'Stall Hits',
@@ -173,6 +273,19 @@ export default function SourceCorrelationView() {
       render: (v: number | null) =>
         v != null ? (
           <span style={{ color: divColor(v), fontWeight: 600 }}>{v.toFixed(1)}%</span>
+        ) : (
+          dash
+        ),
+    },
+    {
+      title: 'Coal. ×',
+      dataIndex: 'coalescingFactor',
+      width: 90,
+      align: 'right' as const,
+      sorter: (a: SourceLineRow, b: SourceLineRow) => (a.coalescingFactor ?? -1) - (b.coalescingFactor ?? -1),
+      render: (v: number | null) =>
+        v != null ? (
+          <span style={{ color: coalColor(v), fontWeight: 600 }}>{v.toFixed(1)}×</span>
         ) : (
           dash
         ),
