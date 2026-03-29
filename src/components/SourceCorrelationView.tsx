@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Table, Empty } from 'antd'
 import type { ColumnsType } from 'antd/es/table'
+import { Resizable } from 'react-resizable'
+import 'react-resizable/css/styles.css'
 import { useStore } from '@/store/useStore'
 import { apiFetch } from '@/api'
 
@@ -49,12 +51,48 @@ function divColor(pct: number): string {
   return '#16a34a'
 }
 
+function ResizableTitle(
+  props: React.HTMLAttributes<HTMLElement> & {
+    onResize?: (e: React.SyntheticEvent, data: { size: { width: number } }) => void
+    width?: number
+  }
+) {
+  const { onResize, width, ...restProps } = props
+  if (!width || !onResize) return <th {...restProps} />
+  return (
+    <Resizable
+      width={width}
+      height={0}
+      handle={<span className="react-resizable-handle" onClick={(e) => e.stopPropagation()} />}
+      onResize={onResize}
+      draggableOpts={{ enableUserSelectHack: false }}
+    >
+      <th {...restProps} />
+    </Resizable>
+  )
+}
+
 export default function SourceCorrelationView() {
   const profileSamples = useStore((s) => s.profileSamples)
   const currentSessionId = useStore((s) => s.currentSessionId)
   const [selectedFuncKey, setSelectedFuncKey] = useState<string | null>(null)
   const [sourceLines, setSourceLines] = useState<string[]>([])
   const [disassembly, setDisassembly] = useState<Map<number, string>>(new Map())
+
+  const [colWidths, setColWidths] = useState<Record<string, number>>({
+    sourceLine: 70,
+    stallHits: 100,
+    stallShare: 90,
+    instExec: 110,
+    threadExec: 120,
+    divergencePct: 110,
+    coalescingFactor: 90,
+  })
+
+  function handleResize(key: string) {
+    return (_: React.SyntheticEvent, { size }: { size: { width: number } }) =>
+      setColWidths((prev) => ({ ...prev, [key]: Math.max(40, size.width) }))
+  }
 
   const functionEntries: FunctionEntry[] = useMemo(() => {
     const samples = profileSamples.filter((s) => s.sessionId === currentSessionId)
@@ -190,7 +228,8 @@ export default function SourceCorrelationView() {
     {
       title: 'Line',
       dataIndex: 'sourceLine',
-      width: 70,
+      width: colWidths.sourceLine,
+      onHeaderCell: () => ({ width: colWidths.sourceLine, onResize: handleResize('sourceLine') }),
       render: (v: number | null) => (
         <span style={{ fontFamily: 'monospace', fontSize: 12 }}>{v != null ? v : dash}</span>
       ),
@@ -237,39 +276,44 @@ export default function SourceCorrelationView() {
     {
       title: 'Stall Hits',
       dataIndex: 'stallHits',
-      width: 100,
+      width: colWidths.stallHits,
       align: 'right',
       defaultSortOrder: 'descend',
       sorter: (a, b) => a.stallHits - b.stallHits,
+      onHeaderCell: () => ({ width: colWidths.stallHits, onResize: handleResize('stallHits') }),
       render: (v: number) => (v > 0 ? v.toLocaleString() : dash),
     },
     {
       title: 'Stall %',
       dataIndex: 'stallShare',
-      width: 90,
+      width: colWidths.stallShare,
       align: 'right',
+      onHeaderCell: () => ({ width: colWidths.stallShare, onResize: handleResize('stallShare') }),
       render: (v: number) => (v > 0 ? `${(v * 100).toFixed(1)}%` : dash),
     },
     {
       title: 'Warp Instr',
       dataIndex: 'instExec',
-      width: 110,
+      width: colWidths.instExec,
       align: 'right',
+      onHeaderCell: () => ({ width: colWidths.instExec, onResize: handleResize('instExec') }),
       render: (v: number) => (v > 0 ? v.toLocaleString() : dash),
     },
     {
       title: 'Thread Instr',
       dataIndex: 'threadExec',
-      width: 120,
+      width: colWidths.threadExec,
       align: 'right',
+      onHeaderCell: () => ({ width: colWidths.threadExec, onResize: handleResize('threadExec') }),
       render: (v: number) => (v > 0 ? v.toLocaleString() : dash),
     },
     {
       title: 'Divergence',
       dataIndex: 'divergencePct',
-      width: 110,
+      width: colWidths.divergencePct,
       align: 'right',
       sorter: (a, b) => (a.divergencePct ?? -1) - (b.divergencePct ?? -1),
+      onHeaderCell: () => ({ width: colWidths.divergencePct, onResize: handleResize('divergencePct') }),
       render: (v: number | null) =>
         v != null ? (
           <span style={{ color: divColor(v), fontWeight: 600 }}>{v.toFixed(1)}%</span>
@@ -280,9 +324,10 @@ export default function SourceCorrelationView() {
     {
       title: 'Coal. ×',
       dataIndex: 'coalescingFactor',
-      width: 90,
+      width: colWidths.coalescingFactor,
       align: 'right' as const,
       sorter: (a: SourceLineRow, b: SourceLineRow) => (a.coalescingFactor ?? -1) - (b.coalescingFactor ?? -1),
+      onHeaderCell: () => ({ width: colWidths.coalescingFactor, onResize: handleResize('coalescingFactor') }),
       render: (v: number | null) =>
         v != null ? (
           <span style={{ color: coalColor(v), fontWeight: 600 }}>{v.toFixed(1)}×</span>
@@ -399,6 +444,7 @@ export default function SourceCorrelationView() {
               pagination={false}
               scroll={{ y: 'calc(100vh - 300px)' }}
               onRow={(record) => ({ style: rowStyle(record.stallShare) })}
+              components={{ header: { cell: ResizableTitle } }}
             />
           </>
         )}

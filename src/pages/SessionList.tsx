@@ -1,9 +1,10 @@
 import React, { useEffect, useState } from 'react'
-import { Button, Tag, Typography, Table, Empty, Spin } from 'antd'
+import { Button, Popconfirm, Tag, Typography, Table, Empty, Spin } from 'antd'
 import type { ColumnsType } from 'antd/es/table'
 import { useNavigate } from 'react-router-dom'
-import { DesktopOutlined, RightOutlined } from '@ant-design/icons'
+import { DeleteOutlined, DesktopOutlined, RightOutlined } from '@ant-design/icons'
 import { useStore } from '@/store/useStore'
+import { useAuthStore } from '@/store/useAuthStore'
 import { SessionSummary, CudaGpuInfo } from '@/types'
 import dayjs from 'dayjs'
 
@@ -76,9 +77,12 @@ const sessionColumns: ColumnsType<SessionSummary> = [
 export default function SessionList() {
   const hosts = useStore((s) => s.hosts)
   const fetchHosts = useStore((s) => s.fetchHosts)
+  const deleteSession = useStore((s) => s.deleteSession)
+  const role = useAuthStore((s) => s.role)
   const navigate = useNavigate()
 
   const [loading, setLoading] = useState(false)
+  const [deletingId, setDeletingId] = useState<string | null>(null)
   // selectedGpuKey: `${hostname}::${deviceId}` — null means show all sessions for the host
   const [selectedGpuKey, setSelectedGpuKey] = useState<string | null>(null)
   const [expandedHost, setExpandedHost] = useState<string | null>(null)
@@ -88,22 +92,47 @@ export default function SessionList() {
     fetchHosts().finally(() => setLoading(false))
   }, [fetchHosts])
 
+  const canDelete = role === 'ADMIN' || role === 'USER'
+
   const viewColumn: ColumnsType<SessionSummary>[number] = {
     title: '',
     key: 'actions',
     align: 'right' as const,
     render: (_: unknown, record: SessionSummary) => (
-      <Button
-        type="primary"
-        size="small"
-        icon={<RightOutlined />}
-        onClick={() => {
-          // Also trigger init load so the dashboard has event data
-          navigate(`/dashboard/${record.sessionId}`)
-        }}
-      >
-        View
-      </Button>
+      <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+        <Button
+          type="primary"
+          size="small"
+          icon={<RightOutlined />}
+          onClick={() => navigate(`/dashboard/${record.sessionId}`)}
+        >
+          View
+        </Button>
+        {canDelete && (
+          <Popconfirm
+            title="Delete session"
+            description="All event data for this session will be permanently removed."
+            onConfirm={async () => {
+              setDeletingId(record.sessionId)
+              try {
+                await deleteSession(record.sessionId)
+              } finally {
+                setDeletingId(null)
+              }
+            }}
+            okText="Delete"
+            okButtonProps={{ danger: true }}
+            cancelText="Cancel"
+          >
+            <Button
+              danger
+              size="small"
+              icon={<DeleteOutlined />}
+              loading={deletingId === record.sessionId}
+            />
+          </Popconfirm>
+        )}
+      </div>
     ),
   }
 
