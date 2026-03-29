@@ -32,6 +32,7 @@ interface AppState {
 
   // actions
   fetchHosts: () => Promise<void>;
+  deleteSession: (sessionId: string) => Promise<void>;
   fetchInit: () => Promise<void>;
   fetchSystemMetrics: (sessionId: string) => Promise<void>;
   fetchProfileSamples: (sessionId: string) => Promise<void>;
@@ -83,6 +84,11 @@ export const useStore = create<AppState>((set, get) => ({
     } catch (err) {
       console.error('Failed to fetch hosts', err);
     }
+  },
+  deleteSession: async (sessionId: string) => {
+    const res = await apiFetch(`/api/v1/events/sessions/${encodeURIComponent(sessionId)}`, { method: 'DELETE' });
+    if (!res.ok) throw new Error(`Failed to delete session: HTTP ${res.status}`);
+    await get().fetchHosts();
   },
   fetchInit: async () => {
     try {
